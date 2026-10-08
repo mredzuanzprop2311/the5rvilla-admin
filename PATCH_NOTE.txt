@@ -1,0 +1,3 @@
+SAFE UI PATCH ONLY
+- Checkout (OUT) calendar chip = half-width on left.
+- IN/STAY/CLOSE, booking data, Airbnb sync, WhatsApp alert, SD, refund, finance unchanged.

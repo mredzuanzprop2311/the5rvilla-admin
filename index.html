@@ -7116,6 +7116,8 @@ window.v21716CompleteNoRefund=v21716CompleteNoRefund;
  .v2186-chip.direct{background:#15803d}.v2186-chip.airbnb{background:#e11d48}
  .v2186-chip.agoda{background:#ea580c}.v2186-chip.booking{background:#0369a1}.v2186-chip.trip{background:#6d28d9}.v2186-chip.other{background:#64748b}
  .v2186-chip.stay{opacity:.78}
+ .v2186-chip.out-half{width:52%;align-self:flex-start;box-sizing:border-box;border-radius:999px 6px 6px 999px}
+ @media(max-width:520px){.v2186-chip.out-half{width:55%}}
  .v2186-chip.closed{background:#475569}
  .v2169-day.closed-day{background:#f1f5f9!important;border-color:#94a3b8!important}
  .v2186-st.closed{background:#475569}
@@ -7202,7 +7204,7 @@ window.v21716CompleteNoRefund=v21716CompleteNoRefund;
    const night=arr.filter(x=>x.s!=="OUT"),cls=[...new Set(night.map(clsOf))];
    const dayType=!night.length?"":cls.length>1?"mixed-day":cls[0]+"-day";
    const turn=arr.some(x=>x.s==="OUT")&&arr.some(x=>x.s==="IN");
-   const shown=arr.slice(0,4).map(x=>{const z=v2172SourceMeta(x.b.platform);return `<span class="v2186-chip ${clsOf(x)} ${x.s==="STAY"?"stay":""}" title="${esc((x.b.guestName||x.b.guest||"-")+" • "+z.label)}">${LBL[x.s]}</span>`;}).join("");
+   const shown=arr.slice(0,4).map(x=>{const z=v2172SourceMeta(x.b.platform);return `<span class="v2186-chip ${clsOf(x)} ${x.s==="STAY"?"stay":""} ${x.s==="OUT"?"out-half":""}" title="${esc((x.b.guestName||x.b.guest||"-")+" • "+z.label)}">${LBL[x.s]}</span>`;}).join("");
    const extra=arr.length>4?`<span class="v2186-chip other">+${arr.length-4}</span>`:"";
    html+=`<div class="v2169-day v2173-clickable ${night.length?"booked":""} ${dayType} ${turn?"v2186-turn":""} ${k===today?"today":""}" data-v2186-date="${k}"><div class="v2169-daynum">${day}</div><div class="v2186-chips">${shown}${extra}</div></div>`;
   }
