@@ -1,0 +1,36 @@
+THE 5R VILLA ADMIN — 100826 CALENDAR SYNC + DATE REASON PATCH
+
+WHAT CHANGED
+1. Airbnb Calendar sync now supports Cloudflare Pages:
+   - Cloudflare Pages: /api/calendar-feed
+   - Netlify fallback remains supported.
+2. Manual date reason:
+   - Click any date in Booking Calendar.
+   - Choose reason:
+     • Tiada booking selepas 10:00 pagi
+     • Cleaner tiada / tidak available
+     • Maintenance / servis
+     • Kegunaan sendiri / owner
+     • Lain-lain
+   - Reason is stored in Firebase settings/calendarRemarks.
+   - IMPORTANT: This is an internal Admin note only. It does NOT close/open Airbnb dates.
+3. Existing WhatsApp alert patch remains:
+   - Check-in alert from 2 days before arrival.
+   - Check-out alert on check-out day.
+4. Booking / SD / refund / finance logic was not intentionally changed.
+
+CLOUDFLARE SETUP (ONE TIME)
+Settings -> Environment variables -> add:
+AIRBNB_ICAL_URL = your private Airbnb iCalendar export URL
+
+Then redeploy the Pages project so functions/api/calendar-feed.js becomes:
+/api/calendar-feed?platform=airbnb
+
+After deploy:
+- Open Dashboard.
+- Tap "Sync Airbnb Now".
+- Confirm status shows Airbnb synced and current active block count.
+- Compare November again with Airbnb app.
+
+SECURITY
+Do NOT paste AIRBNB_ICAL_URL inside index.html.
