@@ -6432,20 +6432,43 @@ const v218Clone=v=>JSON.parse(JSON.stringify(v,(k,x)=>typeof x?.toDate==='functi
 function v218Actor(){const u=auth.currentUser;if(!u)throw Error('Admin login diperlukan.');return {uid:u.uid,admin:u.email||u.uid};}
 function v218Financial(ref){return ['bookings','cashbookEntries'].includes(ref.path.split('/')[0])||ref.path==='settings/sdReserve';}
 function v218Snapshot(d){if(!d)return null;const fields=['bookingNo','villaId','platform','checkIn','checkOut','transactions','rent','securityDeposit','amountPaid','securityDepositPaid','platformNetPayoutExpected','platformPayoutDate','isTrashed','status','checkInAt','checkOutAt','inspectionStatus','refundApproved','refundApprovedAmount','refundProcessed','refundTimestamp','financialVersion','date','kind','category','amountSen','note','reference','bookingId','amount','voidReason'];const out={};fields.forEach(k=>{if(d[k]!==undefined)out[k]=v218Clone(d[k]);});return out;}
+function v218TxKey(t){
+ const x=t||{};
+ return [
+  String(x.type||""),String(x.date||""),Number(x.amount||0).toFixed(2),
+  String(x.note||""),String(x.refundTimestamp||""),String(x.approvalTimestamp||""),
+  String(x.voidedAt||x.voidAt||""),String(x.status||"")
+ ].join("|");
+}
+function v218RefundAppendInfo(ref,before,next){
+ const cached=bookingCache.find(x=>x.id===ref.id);
+ const cachedTx=Array.isArray(cached?.transactions)?cached.transactions:[];
+ const newTx=Array.isArray(next?.transactions)?next.transactions:[];
+ const cachedKeys=new Set(cachedTx.map(v218TxKey));
+ const additions=newTx.filter(x=>!cachedKeys.has(v218TxKey(x)));
+ const refundAdditions=additions.filter(x=>String(x?.type||"")==="Refund"&&!V218.voided(x));
+ return {cached,cachedTx,additions,refundAdditions};
+}
 function v218CheckBookingWrite(ref,before,next){
  if(ref.path.split('/')[0]!=='bookings')return;
- if(!next){if(V218.projectBookings([{id:ref.id,...before}]).positions[0]?.heldSen>0)throw Error('SD masih dipegang. Selesaikan SD sebelum padam kekal.');return;}
+ if(!next){
+  if(V218.projectBookings([{id:ref.id,...before}]).positions[0]?.heldSen>0)
+   throw Error('SD masih dipegang. Selesaikan SD sebelum padam kekal.');
+  return;
+ }
  const oldTx=before?.transactions||[],newTx=next.transactions||[];
  if(JSON.stringify(oldTx)!==JSON.stringify(newTx)){
-  const cached=bookingCache.find(x=>x.id===ref.id);
-  if(before&&cached&&JSON.stringify(cached.transactions||[])!==JSON.stringify(oldTx))throw Error('Booking berubah pada sesi lain. Refresh sebelum ubah bayaran.');
-  newTx.forEach(t=>{
-   if(t.type!=='Refund'||V218.voided(t))return;
-   if(oldTx.some(x=>JSON.stringify(x)===JSON.stringify(t)))return;
-   
-  });
+  const info=v218RefundAppendInfo(ref,before,next);
+
+  // Refund append is allowed to continue against the fresh Firestore snapshot.
+  // Other transaction edits keep the original stale-cache conflict protection.
+  if(before&&info.cached&&JSON.stringify(info.cachedTx)!==JSON.stringify(oldTx)&&info.refundAdditions.length===0){
+   throw Error('Booking berubah pada sesi lain. Refresh sebelum ubah bayaran.');
+  }
+
   const p=V218.projectBookings([{id:ref.id,...next}]);
-  if(p.issues.some(x=>/exceeds deposit/.test(x.message)))throw Error('Refund melebihi SD diterima.');
+  if(p.issues.some(x=>/exceeds deposit/.test(x.message)))
+   throw Error('Refund melebihi SD diterima.');
  }
 }
 async function v218Atomic(ref,data,mode,options){
@@ -6454,17 +6477,86 @@ async function v218Atomic(ref,data,mode,options){
   const snap=await t.get(ref),before=snap.exists()?snap.data():null;
   if(mode==='update'&&!before)throw Error('Rekod tidak ditemui.');
   if(mode==='create'&&before)throw Error('Rekod telah wujud.');
-  const next=mode==='delete'?null:mode==='update'||options?.merge?{...(before||{}),...data}:data;
-  v218CheckBookingWrite(ref,before,next);
-  if(ref.path.split('/')[0]==='cashbookEntries'&&next){
-   if(before&&Number(data.financialVersion)!==Number(before.financialVersion||0))throw Error('Cashbook berubah. Refresh sebelum edit.');
-   if(next.status!=='void')V218.validateManual(next,v218Bookings);
-   if(next.status!=='void'&&next.kind==='in'&&next.bookingId&&v218Manual.some(e=>e.id!==ref.id&&e.status!=='void'&&e.kind==='in'&&e.bookingId===next.bookingId&&String(e.reference||'').trim().toUpperCase()===String(next.reference||'').trim().toUpperCase()))throw Error('Payout reference telah direkod. Gunakan rekod sedia ada.');
-   if(before&&(next.reference!==before.reference||next.bookingId!==before.bookingId))throw Error('Pautan booking/reference tidak boleh ditukar. Void dan rekod pembetulan.');
+
+  let writeData=data;
+
+  // REFUND ONLY:
+  // Merge only the newly-added refund transaction into the fresh server copy.
+  // Existing server transactions are preserved, so another tab/device cannot be overwritten.
+  if(mode==='update'&&ref.path.split('/')[0]==='bookings'&&before&&Array.isArray(data?.transactions)){
+   const previewNext={...before,...data};
+   const info=v218RefundAppendInfo(ref,before,previewNext);
+
+   if(info.refundAdditions.length){
+    const serverTx=Array.isArray(before.transactions)?before.transactions:[];
+    const serverKeys=new Set(serverTx.map(v218TxKey));
+    const mergedTx=[...serverTx];
+
+    info.refundAdditions.forEach(x=>{
+     const key=v218TxKey(x);
+     if(!serverKeys.has(key)){
+      mergedTx.push(x);
+      serverKeys.add(key);
+     }
+    });
+
+    writeData={...data,transactions:mergedTx};
+
+    if(typeof paymentMathFromBooking==='function'){
+     const m=paymentMathFromBooking(before,mergedTx);
+     writeData={
+      ...writeData,
+      grossDue:m.due,
+      totalIncoming:m.incoming,
+      totalRefund:m.refunds,
+      netPaid:m.netPaid,
+      balance:m.balance,
+      paymentStatus:m.status,
+      securityDepositReceived:m.securityDepositReceived,
+      securityDepositRefunded:m.securityDepositRefunded,
+      securityDepositBalance:m.securityDepositBalance
+     };
+    }
+   }
   }
+
+  const next=mode==='delete'
+   ? null
+   : mode==='update'||options?.merge
+     ? {...(before||{}),...writeData}
+     : writeData;
+
+  v218CheckBookingWrite(ref,before,next);
+
+  if(ref.path.split('/')[0]==='cashbookEntries'&&next){
+   if(before&&Number(writeData.financialVersion)!==Number(before.financialVersion||0))
+    throw Error('Cashbook berubah. Refresh sebelum edit.');
+   if(next.status!=='void')V218.validateManual(next,v218Bookings);
+   if(next.status!=='void'&&next.kind==='in'&&next.bookingId&&v218Manual.some(e=>e.id!==ref.id&&e.status!=='void'&&e.kind==='in'&&e.bookingId===next.bookingId&&String(e.reference||'').trim().toUpperCase()===String(next.reference||'').trim().toUpperCase()))
+    throw Error('Payout reference telah direkod. Gunakan rekod sedia ada.');
+   if(before&&(next.reference!==before.reference||next.bookingId!==before.bookingId))
+    throw Error('Pautan booking/reference tidak boleh ditukar. Void dan rekod pembetulan.');
+  }
+
   const version=Number(before?.financialVersion||0)+1;
-  if(mode==='delete')t.delete(ref);else if(mode==='update')t.update(ref,{...data,financialVersion:version,lastFinancialAuditId:auditRef.id});else t.set(ref,{...data,financialVersion:version,lastFinancialAuditId:auditRef.id},options?.merge?{merge:true}:{});
-  t.set(auditRef,{entityPath:ref.path,action:mode==='delete'?'DELETE':before?'UPDATE':'CREATE',actorUid:actor.uid,admin:actor.admin,at:serverTimestamp(),clientAt:new Date().toISOString(),timezone:'Asia/Kuala_Lumpur',before:v218Snapshot(before),after:v218Snapshot(next),version});
+
+  if(mode==='delete')t.delete(ref);
+  else if(mode==='update')t.update(ref,{...writeData,financialVersion:version,lastFinancialAuditId:auditRef.id});
+  else t.set(ref,{...writeData,financialVersion:version,lastFinancialAuditId:auditRef.id},options?.merge?{merge:true}:{});
+
+  t.set(auditRef,{
+   entityPath:ref.path,
+   action:mode==='delete'?'DELETE':before?'UPDATE':'CREATE',
+   actorUid:actor.uid,
+   admin:actor.admin,
+   at:serverTimestamp(),
+   clientAt:new Date().toISOString(),
+   timezone:'Asia/Kuala_Lumpur',
+   before:v218Snapshot(before),
+   after:v218Snapshot(next),
+   version
+  });
+
   return ref;
  });
 }

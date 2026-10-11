@@ -1,3 +1,6 @@
-SAFE UI PATCH ONLY
-- Checkout (OUT) calendar chip = half-width on left.
-- IN/STAY/CLOSE, booking data, Airbnb sync, WhatsApp alert, SD, refund, finance unchanged.
+REFUND CONFLICT FIX
+- Fix false 'Booking berubah pada sesi lain' during SD refund.
+- Refund now appends only the NEW refund transaction to the fresh Firestore snapshot.
+- Existing server transactions are preserved.
+- Non-refund transaction edits keep the original conflict protection.
+- Booking lifecycle, SD guard, refund guard, Airbnb sync, WhatsApp alerts, finance, and OUT-half calendar are unchanged.
