@@ -7826,32 +7826,42 @@ function v2194ClassifyExternal(ext){
  const admin=v2194ActiveAdmin().filter(x=>v2194Overlap(ci,co,String(x.d.checkIn||"").slice(0,10),String(x.d.checkOut||"").slice(0,10)));
  const exact=admin.filter(x=>String(x.d.checkIn||"").slice(0,10)===ci&&String(x.d.checkOut||"").slice(0,10)===co);
  const exactAirbnb=exact.find(x=>String(x.d.platform||"").trim().toLowerCase()==="airbnb");
- const exactDirect=exact.find(x=>String(x.d.platform||"").trim().toLowerCase()==="direct");
+ const anyDirect=admin.find(x=>String(x.d.platform||"").trim().toLowerCase()==="direct");
+
+ // DIRECT RULE:
+ // A Direct guest normally requires Airbnb to be blocked. If an Airbnb/iCal
+ // block overlaps that Direct guest, treat it as a valid tally — not an error.
+ // Exact range is still required for an Airbnb-platform guest.
+ if(anyDirect)return {code:"TALLY_DIRECT",label:"TALLY ✓ DIRECT",admin:anyDirect,manual};
+
  if(exactAirbnb)return {code:"TALLY",label:"TALLY ✓",admin:exactAirbnb,manual};
- if(manual.manual && exactDirect)return {code:"DIRECT_CLOSE",label:"DIRECT + MANUAL CLOSE",admin:exactDirect,manual};
  if(manual.manual)return {code:"MANUAL_CLOSE",label:"MANUAL CLOSE",admin:exact[0]||admin[0]||null,manual};
- if(exactDirect)return {code:"DIRECT_BLOCK",label:"DIRECT + ABNB BLOCK • TANDA REASON",admin:exactDirect,manual};
+
+ // Only Airbnb-platform Admin bookings remain range-sensitive here.
  if(admin.length)return {code:"DATE_MISMATCH",label:"DATE MISMATCH",admin:admin[0],manual};
  return {code:"MISSING_ADMIN",label:"BELUM MASUK ADMIN",admin:null,manual};
 }
 function v2194ClassifyAdmin(item){
  const d=item.d,ci=String(d.checkIn||"").slice(0,10),co=String(d.checkOut||"").slice(0,10),p=String(d.platform||"").trim().toLowerCase();
- if(p==="direct"){
-  const exactExt=v2194ActiveExternal().find(x=>String(x.d.checkIn).slice(0,10)===ci&&String(x.d.checkOut).slice(0,10)===co);
-  if(!exactExt)return {code:"DIRECT",label:"DIRECT",ext:null};
-  const x=v2194ClassifyExternal(exactExt.d);return {...x,ext:exactExt};
- }
  const ext=v2194ActiveExternal().filter(x=>v2194Overlap(ci,co,String(x.d.checkIn).slice(0,10),String(x.d.checkOut).slice(0,10)));
+
+ if(p==="direct"){
+  // Direct guest + overlapping Airbnb block = healthy tally.
+  // If no Airbnb block exists, Direct itself is still valid and not an error.
+  if(ext.length)return {code:"TALLY_DIRECT",label:"TALLY ✓ DIRECT",ext:ext[0]};
+  return {code:"DIRECT",label:"DIRECT",ext:null};
+ }
+
  const exact=ext.find(x=>String(x.d.checkIn).slice(0,10)===ci&&String(x.d.checkOut).slice(0,10)===co);
  if(exact)return {code:"TALLY",label:"TALLY ✓",ext:exact};
  if(ext.length)return {code:"DATE_MISMATCH",label:"DATE MISMATCH",ext:ext[0]};
  return {code:"NO_AIRBNB",label:"SEMAK AIRBNB / CANCEL",ext:null};
 }
 function v2194StateClass(code){
- if(code==="TALLY")return "tally";
- if(["MANUAL_CLOSE","DIRECT_CLOSE"].includes(code))return "close";
+ if(["TALLY","TALLY_DIRECT"].includes(code))return "tally";
+ if(code==="MANUAL_CLOSE")return "close";
  if(code==="DIRECT")return "direct";
- if(["DATE_MISMATCH","DIRECT_BLOCK"].includes(code))return "mismatch";
+ if(code==="DATE_MISMATCH")return "mismatch";
  return "missing";
 }
 function v2194Esc(v){return typeof esc==="function"?esc(v):String(v??"");}
@@ -8072,13 +8082,20 @@ function v2195MonthIssues(monthKey){
   .filter(e=>v2192MonthKey(e.checkIn)===monthKey)
   .filter(e=>!(typeof v2194ManualCloseInfo==="function"&&v2194ManualCloseInfo(String(e.checkIn||"").slice(0,10),String(e.checkOut||"").slice(0,10)).manual));
  const admins=(Array.isArray(bookingCache)?bookingCache:[])
-  .filter(b=>String(b.platform||"").trim().toLowerCase()==="airbnb")
+  .filter(b=>["airbnb","direct"].includes(String(b.platform||"").trim().toLowerCase()))
   .filter(b=>!["cancelled","rejected"].includes(String(b.status||"").toLowerCase()))
   .filter(b=>String(b.checkIn||"").slice(0,7)===monthKey);
 
  const usedAdmin=new Set(),usedEvent=new Set(),issues=[];
  events.forEach((e,ei)=>{
-  const ai=admins.findIndex((b,idx)=>!usedAdmin.has(idx)&&String(b.checkIn||"").slice(0,10)===String(e.checkIn||"").slice(0,10)&&String(b.checkOut||"").slice(0,10)===String(e.checkOut||"").slice(0,10));
+  const eIn=String(e.checkIn||"").slice(0,10),eOut=String(e.checkOut||"").slice(0,10);
+  const ai=admins.findIndex((b,idx)=>{
+   if(usedAdmin.has(idx))return false;
+   const bIn=String(b.checkIn||"").slice(0,10),bOut=String(b.checkOut||"").slice(0,10);
+   const p=String(b.platform||"").trim().toLowerCase();
+   if(p==="direct")return v2194Overlap(eIn,eOut,bIn,bOut);
+   return bIn===eIn && bOut===eOut;
+  });
   if(ai>=0){usedEvent.add(ei);usedAdmin.add(ai);}
  });
  events.forEach((e,ei)=>{
@@ -8088,6 +8105,7 @@ function v2195MonthIssues(monthKey){
  });
  admins.forEach((b,idx)=>{
   if(usedAdmin.has(idx))return;
+  if(String(b.platform||"").trim().toLowerCase()==="direct")return;
   const already=issues.some(x=>x.admin===b);
   if(!already)issues.push({type:"NO_AIRBNB",checkIn:String(b.checkIn||"").slice(0,10),checkOut:String(b.checkOut||"").slice(0,10),event:null,admin:b});
  });
@@ -8510,6 +8528,162 @@ setTimeout(()=>{try{v2197RefreshNavHealth();}catch(e){console.warn("V2.19.7 nav 
 Object.assign(window,{v2197RefreshNavHealth,v2197AllCurrentFutureIssues});
 window.THE5R_NAV_HEALTH_VERSION="V2.19.7_NAV_HEALTH";
 
+
+// V2.19.8 — DIRECT GUEST TALLY FIX
+// Direct Admin guest + overlapping Airbnb/iCal block = healthy TALLY.
+// Direct booking without Airbnb block remains valid Direct, not an error.
+// Airbnb-platform guest still requires exact Check-in→Check-out range.
+window.THE5R_DIRECT_TALLY_VERSION="V2.19.8_DIRECT_TALLY";
+
+// ============================================================
+// V2.19.9 — CLICK RED ERROR BADGE → ERROR DETAIL
+// Admin no longer needs to hunt for the problem.
+// Clicking the red badge shows exact month/date/type and direct actions.
+// ============================================================
+
+function v2199EnsureErrorModal(){
+ let m=$("v2199ErrorModal"); if(m)return m;
+ const s=document.createElement("style");
+ s.id="v2199ErrorStyle";
+ s.textContent=`
+  #v2199ErrorModal{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100005;display:none;align-items:center;justify-content:center;padding:16px}
+  #v2199ErrorModal.show{display:flex}
+  #v2199ErrorModal .box{width:min(650px,96vw);max-height:86vh;overflow:auto;background:#fff;border-radius:18px;padding:16px;box-shadow:0 22px 65px rgba(15,23,42,.3)}
+  .v2199-title{font-size:18px;font-weight:950;color:#173b62}
+  .v2199-sub{font-size:11px;color:#64748b;margin-top:4px;line-height:1.5}
+  .v2199-list{display:grid;gap:9px;margin-top:13px}
+  .v2199-item{border:1px solid #fecaca;background:#fff7f7;border-radius:12px;padding:11px}
+  .v2199-item.ok{border-color:#bbf7d0;background:#f0fdf4}
+  .v2199-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+  .v2199-type{font-size:12px;font-weight:950;color:#991b1b}
+  .v2199-month{font-size:10px;font-weight:900;color:#64748b}
+  .v2199-meta{font-size:11px;color:#475569;margin-top:4px;line-height:1.45}
+  .v2199-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+  .v2199-actions button{border:0;border-radius:9px;padding:8px 10px;font-size:10px;font-weight:900;cursor:pointer}
+  .v2199-go{background:#173b62;color:#fff}.v2199-request{background:#0f6fb5;color:#fff}.v2199-close{background:#e2e8f0;color:#334155}
+  .v2199-ok{font-size:13px;font-weight:900;color:#166534;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;margin-top:12px}
+ `;
+ document.head.appendChild(s);
+
+ m=document.createElement("div"); m.id="v2199ErrorModal";
+ m.innerHTML=`<div class="box">
+   <div class="v2199-title" id="v2199ErrorTitle">Error Details</div>
+   <div class="v2199-sub" id="v2199ErrorSub"></div>
+   <div class="v2199-list" id="v2199ErrorList"></div>
+   <div class="v2199-actions"><button class="v2199-close" onclick="v2199CloseErrors()">TUTUP</button></div>
+  </div>`;
+ document.body.appendChild(m);
+ m.addEventListener("click",e=>{if(e.target===m)v2199CloseErrors();});
+ return m;
+}
+function v2199IssueLabel(type){
+ const map={
+  MISSING_ADMIN:"AIRBNB ADA • ADMIN BELUM MASUK",
+  DATE_MISMATCH:"DATE MISMATCH",
+  NO_AIRBNB:"ADMIN AIRBNB ADA • iCal TIADA / SEMAK CANCEL"
+ };
+ return map[type]||String(type||"PERLU SEMAK");
+}
+function v2199MonthLabel(key){
+ const [y,m]=String(key||"").split("-").map(Number);
+ if(!y||!m)return key||"-";
+ return new Intl.DateTimeFormat("ms-MY",{month:"long",year:"numeric"}).format(new Date(y,m-1,1));
+}
+function v2199GetScopeIssues(scope){
+ const all=typeof v2197AllCurrentFutureIssues==="function"?v2197AllCurrentFutureIssues():[];
+ if(scope==="requests")return all.filter(x=>["MISSING_ADMIN","DATE_MISMATCH"].includes(String(x.type||"")));
+ return all;
+}
+function v2199OpenErrors(scope="dashboard"){
+ const m=v2199EnsureErrorModal();
+ const issues=v2199GetScopeIssues(scope);
+ const activeReq=typeof v2197ActiveRequestCount==="function"?v2197ActiveRequestCount():0;
+ const scopeName=scope==="requests"?"Guest Requests":scope==="upcoming"?"Upcoming":"Dashboard";
+ $("v2199ErrorTitle").textContent=`${scopeName} — Perlu Semak`;
+ $("v2199ErrorSub").textContent=scope==="requests"
+   ?`Tarikh Airbnb/Admin yang perlukan detail guest + ${activeReq} Guest Request aktif. Tekan terus untuk pergi ke tarikh masalah.`
+   :"Senarai tepat tarikh/range yang menyebabkan tanda merah. Bila dibetulkan, tanda merah akan hilang automatik.";
+
+ if(!issues.length){
+  $("v2199ErrorList").innerHTML=`<div class="v2199-ok">✓ Tiada error Airbnb ↔ Admin sekarang.${scope==="requests"&&activeReq?` Masih ada ${activeReq} Guest Request aktif untuk diproses.`:""}</div>`;
+ }else{
+  $("v2199ErrorList").innerHTML=issues.map((x,i)=>{
+   const month=x.month||String(x.checkIn||"").slice(0,7);
+   const guest=x.admin?.guestName||x.admin?.guest||"";
+   return `<div class="v2199-item">
+    <div class="v2199-top">
+     <div><div class="v2199-type">⚠ ${v2194Esc(v2199IssueLabel(x.type))}</div><div class="v2199-meta">${v2194Esc(x.checkIn||"-")} → ${v2194Esc(x.checkOut||"-")}${guest?`<br>Admin: ${v2194Esc(guest)}`:""}</div></div>
+     <div class="v2199-month">${v2194Esc(v2199MonthLabel(month))}</div>
+    </div>
+    <div class="v2199-actions">
+     <button class="v2199-go" onclick="v2199GoIssue(${i},'${scope}')">BUKA TARIKH</button>
+     ${x.type==="MISSING_ADMIN"?`<button class="v2199-request" onclick="v2199RequestFromIssue(${i},'${scope}')">GUEST REQUEST</button>`:""}
+    </div>
+   </div>`;
+  }).join("");
+ }
+ m.dataset.scope=scope;
+ window.v2199CurrentIssues=issues;
+ m.classList.add("show");
+}
+function v2199CloseErrors(){$("v2199ErrorModal")?.classList.remove("show");}
+function v2199GoIssue(index,scope){
+ const issues=window.v2199CurrentIssues||[],x=issues[index];if(!x)return;
+ v2199CloseErrors();
+ const month=x.month||String(x.checkIn||"").slice(0,7);
+ const [y,m]=month.split("-").map(Number);
+ v2194TallyDate=new Date(y,m-1,1);
+ v214ActivateTab("upcoming");
+ setTimeout(()=>{
+  v2194RenderTallyCard("upcoming");
+  const el=document.querySelector(`#v2194UpcomingTallyCalendar [data-v2194-date="${x.checkIn}"]`);
+  if(el){
+   el.classList.add("v2195-error-date");
+   el.scrollIntoView({behavior:"smooth",block:"center"});
+  }else{
+   $("v2194UpcomingTallyCalendar")?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+ },130);
+}
+function v2199RequestFromIssue(index,scope){
+ const issues=window.v2199CurrentIssues||[],x=issues[index];if(!x)return;
+ v2199CloseErrors();
+ v2195StartGuestRequest(x.checkIn,x.checkOut);
+}
+
+Object.assign(window,{v2199OpenErrors,v2199CloseErrors,v2199GoIssue,v2199RequestFromIssue});
+
+// Make only the health badge itself open details; tab button still works normally.
+function v2199WireHealthBadges(){
+ const map=[
+  ["v2197DashHealth","dashboard"],
+  ["v2197ReqHealth","requests"],
+  ["v2197UpHealth","upcoming"]
+ ];
+ map.forEach(([id,scope])=>{
+  const el=$(id);if(!el||el.dataset.v2199==="1")return;
+  el.dataset.v2199="1";
+  el.style.cursor="pointer";
+  el.title=(el.title?el.title+" • ":"")+"Tekan untuk lihat detail error";
+  el.addEventListener("click",e=>{
+   e.preventDefault();e.stopPropagation();
+   v2199OpenErrors(scope);
+  });
+ });
+}
+
+// Extend existing health refresh so wiring survives re-render/state changes.
+const v2199BaseHealth=v2197RefreshNavHealth;
+v2197RefreshNavHealth=function(){
+ const r=v2199BaseHealth();
+ setTimeout(v2199WireHealthBadges,0);
+ return r;
+};
+window.v2197RefreshNavHealth=v2197RefreshNavHealth;
+
+setTimeout(()=>{try{v2197RefreshNavHealth();v2199WireHealthBadges();}catch(e){console.warn("V2.19.9 error detail init",e)}},2200);
+window.THE5R_ERROR_DETAIL_VERSION="V2.19.9_CLICK_ERROR_DETAIL";
+
 window.THE5R_ADMIN_VERSION="V2.18.9_ALERT_ONE_CLICK_WHATSAPP";
 
 // ============================================================
@@ -8647,7 +8821,7 @@ function v2192Monthly(){
    !(typeof v2194ManualCloseInfo==="function" && v2194ManualCloseInfo(String(e.checkIn||"").slice(0,10),String(e.checkOut||"").slice(0,10)).manual)
   );
   const adminRows=admin.filter(b=>
-   String(b.platform||"").trim().toLowerCase()==="airbnb" &&
+   ["airbnb","direct"].includes(String(b.platform||"").trim().toLowerCase()) &&
    v2192MonthKey(b.checkIn)===k &&
    !["cancelled","rejected"].includes(String(b.status||"").toLowerCase())
   );
@@ -8660,11 +8834,14 @@ function v2192Monthly(){
   const matchedIcal=new Set(),matchedAdmin=new Set();
 
   remainingIcal.forEach((e,ei)=>{
-   const ai=remainingAdmin.findIndex((b,idx)=>
-    !matchedAdmin.has(idx) &&
-    String(b.checkIn||"").slice(0,10)===String(e.checkIn||"").slice(0,10) &&
-    String(b.checkOut||"").slice(0,10)===String(e.checkOut||"").slice(0,10)
-   );
+   const eIn=String(e.checkIn||"").slice(0,10),eOut=String(e.checkOut||"").slice(0,10);
+   const ai=remainingAdmin.findIndex((b,idx)=>{
+    if(matchedAdmin.has(idx))return false;
+    const bIn=String(b.checkIn||"").slice(0,10),bOut=String(b.checkOut||"").slice(0,10);
+    const p=String(b.platform||"").trim().toLowerCase();
+    if(p==="direct")return v2194Overlap(eIn,eOut,bIn,bOut);
+    return bIn===eIn && bOut===eOut;
+   });
    if(ai>=0){matchedIcal.add(ei);matchedAdmin.add(ai);}
   });
 
@@ -8750,7 +8927,7 @@ function v2192RenderMonitor(){
    <button type="button" class="v2192-sync" onclick="v2192SyncAndCheck()">↻ SYNC & CHECK AIRBNB</button>
   </div>
   <div class="v2192-grid">
-   ${months.map(x=>`<div class="v2192-month ${x.needCheck>0?"v2195-month-error":""}" ${x.needCheck>0?`onclick="v2195OpenMonthIssues('${x.key}')"`:""}><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">ABNB ${x.ical} • ADMIN ${x.admin}</div>${x.needCheck>0?`<span class="err">⚠ ERROR • ${x.needCheck} NEED TO CHECK • TEKAN</span>`:`<span class="ok">✓ TALLY</span>`}</div>`).join("")}
+   ${months.map(x=>`<div class="v2192-month ${x.needCheck>0?"v2195-month-error":""}" ${x.needCheck>0?`onclick="v2195OpenMonthIssues('${x.key}')"`:""}><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">ABNB ${x.ical} • ADMIN/Direct ${x.admin}</div>${x.needCheck>0?`<span class="err">⚠ ERROR • ${x.needCheck} NEED TO CHECK • TEKAN</span>`:`<span class="ok">✓ TALLY</span>`}</div>`).join("")}
   </div>
   <div class="v2192-summary">Bulan lepas disembunyikan • Error dikira automatik ikut range Check-in → Check-out. Bila data sudah tally selepas Sync, error hilang sendiri.</div>
   <div class="v2192-list">
