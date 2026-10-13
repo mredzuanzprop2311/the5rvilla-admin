@@ -1118,7 +1118,7 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
     Gunakan bila iCal Airbnb hanya memberi tarikh tetapi nama/detail booking anda masukkan sendiri.
    </div>
    <button id="directOverrideBtn" type="button">
-    INI BOOKING YANG SAMA — BENARKAN EDIT & SAVE
+    BENARKAN OVERRIDE — EDIT & SAVE
    </button>
    <div id="directOverrideActive">✅ AIRBNB / iCal OVERRIDE AKTIF — Edit & Save dibenarkan.</div>
   </div>
@@ -2215,12 +2215,12 @@ function isExactConflictRange(conflict,checkIn,checkOut){
 
 function isAirbnbIcalEditOverrideEligible(data, conflict){
  const editId=String($("editId")?.value||"");
- const platform=String(data?.platform||$("platform")?.value||"").trim().toLowerCase();
+ // Robust rule: whenever Admin is EDITING an existing record and the detected
+ // conflict is Airbnb/iCal, show an explicit override option.
+ // We do NOT silently bypass it; Admin must press the confirmation button.
  return !!(
   editId &&
-  platform==="airbnb" &&
-  isAirbnbConflict(conflict) &&
-  String(conflict?.sourceType||"")==="publicAvailability"
+  isAirbnbConflict(conflict)
  );
 }
 
@@ -2245,7 +2245,7 @@ function showDirectOverrideOption(conflict,checkIn,checkOut){
   box.classList.add("show");
   txt.textContent=
    "Airbnb/iCal bertindih "+conflict.checkIn+" hingga "+conflict.checkOut+
-   ". iCal hanya bawa tarikh. Jika ini booking Airbnb yang sama dan nama/detail anda isi sendiri, tekan Benarkan Edit & Save.";
+   ". Jika ini booking yang sama, atau tarikh Airbnb yang anda close sendiri untuk guest Direct, tekan Benarkan Edit & Save.";
   if(active){
    active.classList.toggle(
     "show",
@@ -2273,7 +2273,7 @@ $("directOverrideBtn")?.addEventListener("click",async()=>{
   const conflict=await findBookingConflict(data,editId);
 
   if(!conflict || !isAirbnbIcalEditOverrideEligible(data,conflict)){
-   alert("Override hanya dibenarkan semasa edit booking Airbnb sedia ada yang bertindih dengan blok Airbnb/iCal.");
+   alert("Override hanya dibenarkan semasa EDIT booking sedia ada yang bertindih dengan Airbnb/iCal.");
    resetDirectOverride();
    await previewAvailability();
    return;
@@ -2283,7 +2283,7 @@ $("directOverrideBtn")?.addEventListener("click",async()=>{
    "SAHKAN AIRBNB / iCal OVERRIDE\n\n"+
    "Tarikh: "+checkIn+" hingga "+checkOut+"\n"+
    "Airbnb: BOOKED\n\n"+
-   "Tekan OK hanya jika blok iCal ini ialah booking yang sama dan nama/detail anda masukkan sendiri dalam Admin."
+   "Tekan OK hanya jika blok Airbnb/iCal ini memang booking yang sama ATAU tarikh yang anda sendiri close untuk guest Direct. Jangan override booking Airbnb guest lain."
   );
 
   if(!ok) return;
@@ -7600,6 +7600,916 @@ window.updateDashboard=updateDashboard;
 
 setTimeout(()=>{try{v2189RenderWaAlerts();}catch(e){console.warn("V2.18.9 alert init",e)}},1700);
 
+
+// ============================================================
+// V2.19.3 — UPCOMING BOOKING CALENDAR
+// Visible inside Upcoming. Click a booked date to open the Admin guest booking.
+// External Airbnb/iCal-only dates show a clear message because iCal has no guest name.
+// ============================================================
+let v2193UpcomingCalDate=new Date();
+
+function v2193DateKey(d){
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function v2193ActiveBooking(d){
+ const s=String(d?.status||"").toLowerCase();
+ const stay=String(d?.stayStatus||"").toLowerCase();
+ return !["cancelled","rejected"].includes(s) && s!=="completed" && stay!=="checked-out" && !d?.checkOutAt;
+}
+function v2193BookingsForDate(dateKey){
+ return (Array.isArray(bookingCache)?bookingCache:[])
+  .map((d,i)=>({d,i}))
+  .filter(({d})=>v2193ActiveBooking(d)&&d.checkIn&&d.checkOut&&dateKey>=String(d.checkIn).slice(0,10)&&dateKey<String(d.checkOut).slice(0,10));
+}
+function v2193ExternalForDate(dateKey){
+ return (Array.isArray(v2172ExternalCalendarCache)?v2172ExternalCalendarCache:[])
+  .filter(d=>d?.checkIn&&d?.checkOut&&dateKey>=String(d.checkIn).slice(0,10)&&dateKey<String(d.checkOut).slice(0,10));
+}
+function v2193EnsureUpcomingCalendar(){
+ const panel=$("v214UpcomingPanel"); if(!panel)return null;
+ let card=$("v2193UpcomingCalendar");
+ if(!card){
+  card=document.createElement("div");
+  card.id="v2193UpcomingCalendar";
+  card.className="v2193-up-cal";
+  const head=panel.querySelector(".v214-section-head");
+  if(head)head.insertAdjacentElement("afterend",card); else panel.insertBefore(card,panel.firstChild);
+ }
+ if(!$("v2193UpcomingCalendarStyle")){
+  const s=document.createElement("style");
+  s.id="v2193UpcomingCalendarStyle";
+  s.textContent=`
+   #v2193UpcomingCalendar{margin:12px 0 16px;padding:14px;border:1px solid #dbe7f2;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(15,23,42,.04)}
+   .v2193-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+   .v2193-title{font-size:17px;font-weight:900;color:#173b62}.v2193-sub{font-size:11px;color:#64748b;margin-top:2px}
+   .v2193-nav{display:flex;gap:6px}.v2193-nav button{border:1px solid #cbd5e1;background:#f8fafc;border-radius:9px;padding:7px 10px;font-weight:850;cursor:pointer}
+   .v2193-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+   .v2193-dow{text-align:center;font-size:10px;font-weight:900;color:#64748b;padding:3px 0}
+   .v2193-day{min-height:58px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:7px;box-sizing:border-box;cursor:default}
+   .v2193-day.booked{cursor:pointer;background:#f8fbff;border-color:#93c5fd;box-shadow:inset 0 0 0 1px rgba(37,99,235,.06)}
+   .v2193-day.external{cursor:pointer;background:#fff7f7;border-color:#fca5a5}
+   .v2193-day.today{outline:2px solid #2563eb;outline-offset:1px}
+   .v2193-num{font-size:12px;font-weight:900;color:#1e293b}
+   .v2193-guest{font-size:9px;font-weight:850;margin-top:5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#173b62}
+   .v2193-airbnb{font-size:9px;font-weight:850;margin-top:5px;color:#b42318}
+   .v2193-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:9px;font-size:10px;color:#64748b;font-weight:750}
+   @media(max-width:650px){.v2193-grid{gap:4px}.v2193-day{min-height:52px;padding:5px}.v2193-guest,.v2193-airbnb{font-size:8px}.v2193-title{font-size:16px}}
+  `;
+  document.head.appendChild(s);
+ }
+ return card;
+}
+function v2193MonthLabel(y,m){
+ return new Intl.DateTimeFormat("ms-MY",{month:"long",year:"numeric"}).format(new Date(y,m,1));
+}
+function v2193RenderUpcomingCalendar(){
+ const card=v2193EnsureUpcomingCalendar(); if(!card)return;
+ const y=v2193UpcomingCalDate.getFullYear(),m=v2193UpcomingCalDate.getMonth();
+ const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate(),today=localTodayISO();
+ let cells=["Ahd","Isn","Sel","Rab","Kha","Jum","Sab"].map(x=>`<div class="v2193-dow">${x}</div>`).join("");
+ for(let i=0;i<first.getDay();i++)cells+='<div></div>';
+ for(let day=1;day<=days;day++){
+  const k=`${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  const admin=v2193BookingsForDate(k);
+  const ext=v2193ExternalForDate(k);
+  const cls=admin.length?"booked":ext.length?"external":"";
+  let detail="";
+  if(admin.length){
+   const names=admin.slice(0,2).map(x=>x.d.guestName||x.d.guest||"Guest");
+   detail=`<div class="v2193-guest">${v2193Esc(names.join(" / "))}${admin.length>2?` +${admin.length-2}`:""}</div>`;
+  }else if(ext.length){
+   detail=`<div class="v2193-airbnb">Airbnb iCal</div>`;
+  }
+  cells+=`<div class="v2193-day ${cls} ${k===today?"today":""}" ${admin.length||ext.length?`onclick="v2193GoToDate('${k}')"`:""} title="${admin.length?`${admin.length} Admin booking`:ext.length?`${ext.length} Airbnb iCal block`:"Available"}"><div class="v2193-num">${day}</div>${detail}</div>`;
+ }
+ card.innerHTML=`
+  <div class="v2193-head">
+   <div><div class="v2193-title">📅 Booking Calendar — ${v2193Esc(v2193MonthLabel(y,m))}</div><div class="v2193-sub">Tekan tarikh booked untuk terus buka guest booking.</div></div>
+   <div class="v2193-nav"><button type="button" onclick="v2193CalMove(-1)">‹</button><button type="button" onclick="v2193CalToday()">Today</button><button type="button" onclick="v2193CalMove(1)">›</button></div>
+  </div>
+  <div class="v2193-grid">${cells}</div>
+  <div class="v2193-legend"><span>🔵 Admin booking — tekan untuk guest</span><span>🔴 Airbnb iCal sahaja — belum ada nama guest</span></div>`;
+}
+function v2193Esc(v){return typeof esc==="function"?esc(v):String(v??"");}
+function v2193GoToDate(dateKey){
+ const admin=v2193BookingsForDate(dateKey);
+ if(admin.length===1){
+  viewBooking(admin[0].i);
+  return;
+ }
+ if(admin.length>1){
+  // Reuse the existing calendar detail modal for multiple Admin bookings.
+  if(typeof v2173OpenDay==="function"){v2173OpenDay(dateKey);return;}
+  viewBooking(admin[0].i);return;
+ }
+ const ext=v2193ExternalForDate(dateKey);
+ if(ext.length){
+  alert("Tarikh "+dateKey+" ada Airbnb/iCal booking tetapi nama guest belum ada dalam Admin. Semak Airbnb dan masukkan detail guest.");
+ }
+}
+function v2193CalMove(step){
+ v2193UpcomingCalDate.setMonth(v2193UpcomingCalDate.getMonth()+Number(step||0));
+ v2193RenderUpcomingCalendar();
+}
+function v2193CalToday(){
+ v2193UpcomingCalDate=new Date();
+ v2193RenderUpcomingCalendar();
+}
+Object.assign(window,{v2193GoToDate,v2193CalMove,v2193CalToday,v2193RenderUpcomingCalendar});
+
+// Render after Upcoming opens and after data/dashboard refreshes.
+const v2193BaseActivateTab=v214ActivateTab;
+v214ActivateTab=function(name){
+ v2193BaseActivateTab(name);
+ if(name==="upcoming")setTimeout(v2193RenderUpcomingCalendar,80);
+};
+window.v214ActivateTab=v214ActivateTab;
+
+const v2193BaseUpdateDashboard=updateDashboard;
+updateDashboard=function(){
+ v2193BaseUpdateDashboard();
+ if(!$("v214UpcomingPanel")?.classList.contains("hidden"))v2193RenderUpcomingCalendar();
+};
+window.updateDashboard=updateDashboard;
+
+setTimeout(()=>{try{v2193EnsureUpcomingCalendar();}catch(e){console.warn("V2.19.3 Upcoming Calendar init",e)}},1500);
+
+window.THE5R_UPCOMING_CALENDAR_VERSION="V2.19.3_CLICK_TO_GUEST";
+
+
+// ============================================================
+// V2.19.4 — DASHBOARD CLEANUP + 14-DAY OPS + AIRBNB/ADMIN TALLY CALENDAR
+// Additive UI/monitoring patch only.
+// Does NOT modify booking lifecycle, SD/refund rules, cashbook/finance, or iCal fetch.
+// ============================================================
+
+// Hide dashboard blocks the owner marked as duplicate/unnecessary.
+// Their underlying logic is left intact.
+(function v2194HideDuplicateDashboardBlocks(){
+ let s=$("v2194DashboardCleanupStyle");
+ if(!s){
+  s=document.createElement("style");
+  s.id="v2194DashboardCleanupStyle";
+  s.textContent=`
+   #v21715NextUpcoming,#v21715IntegrityWatch,#v21715SdDetail{display:none!important}
+   .v2194-tally-card{margin:14px 0 16px;padding:14px;border:1px solid #dbe7f2;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(15,23,42,.04)}
+   .v2194-tally-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+   .v2194-tally-title{font-size:17px;font-weight:900;color:#173b62}
+   .v2194-tally-sub{font-size:11px;color:#64748b;line-height:1.45;margin-top:3px}
+   .v2194-nav{display:flex;gap:6px}.v2194-nav button{border:1px solid #cbd5e1;background:#f8fafc;border-radius:9px;padding:7px 10px;font-weight:850;cursor:pointer}
+   .v2194-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+   .v2194-dow{text-align:center;font-size:10px;font-weight:900;color:#64748b;padding:3px 0}
+   .v2194-day{min-height:76px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;cursor:default;overflow:hidden}
+   .v2194-day.clickable{cursor:pointer}.v2194-day.today{outline:2px solid #2563eb;outline-offset:1px}
+   .v2194-num{font-size:12px;font-weight:950;color:#1e293b;margin-bottom:4px}
+   .v2194-slot{display:block;border-radius:6px;padding:3px 4px;margin-top:3px;font-size:8px;font-weight:850;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+   .v2194-slot.abnb{background:#ffe4e6;color:#9f1239}.v2194-slot.admin{background:#dbeafe;color:#1e3a8a}
+   .v2194-slot.none{background:#f1f5f9;color:#64748b}.v2194-slot.direct{background:#dcfce7;color:#166534}
+   .v2194-state{display:inline-block;margin-top:4px;border-radius:999px;padding:2px 5px;font-size:7px;font-weight:950}
+   .v2194-state.tally{background:#dcfce7;color:#166534}.v2194-state.mismatch{background:#fef3c7;color:#92400e}
+   .v2194-state.missing{background:#fee2e2;color:#991b1b}.v2194-state.close{background:#e2e8f0;color:#334155}.v2194-state.direct{background:#dcfce7;color:#166534}
+   .v2194-legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:9px;font-size:10px;color:#64748b;font-weight:750}
+   #v2194CloseModal{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100000;display:none;align-items:center;justify-content:center;padding:16px}
+   #v2194CloseModal.show{display:flex}
+   #v2194CloseModal .box{width:min(520px,96vw);background:#fff;border-radius:16px;padding:16px;box-shadow:0 18px 48px rgba(15,23,42,.25)}
+   #v2194CloseModal h3{margin:0 0 6px}.v2194-modal-meta{font-size:12px;color:#64748b;line-height:1.5}
+   #v2194CloseReason,#v2194CloseNote{width:100%;box-sizing:border-box;margin-top:9px;border:1px solid #cbd5e1;border-radius:10px;padding:10px;font:inherit}
+   #v2194CloseNote{min-height:72px;resize:vertical}.v2194-modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+   .v2194-modal-actions button{border:0;border-radius:10px;padding:10px 12px;font-weight:850;cursor:pointer}.v2194-save{background:#0f3558;color:#fff}.v2194-remove{background:#fee2e2;color:#991b1b}.v2194-cancel{background:#e2e8f0;color:#334155}
+   @media(max-width:650px){.v2194-grid{gap:4px}.v2194-day{min-height:70px;padding:4px}.v2194-slot{font-size:7.5px}.v2194-tally-title{font-size:16px}}
+  `;
+  document.head.appendChild(s);
+ }
+})();
+
+function v2194DateAdd(iso,days){
+ const d=new Date(String(iso).slice(0,10)+"T00:00:00");
+ d.setDate(d.getDate()+days);
+ return v2169DateKey(d);
+}
+function v2194IsCancelled(d){return ["cancelled","rejected"].includes(String(d?.status||"").toLowerCase());}
+function v2194IsCompleted(d){
+ return !!d?.checkOutAt || String(d?.stayStatus||"").toLowerCase()==="checked-out" || String(d?.status||"").toLowerCase()==="completed";
+}
+function v2194ActiveAdmin(){
+ return (Array.isArray(bookingCache)?bookingCache:[]).map((d,i)=>({d,i})).filter(x=>!v2194IsCancelled(x.d));
+}
+function v2194ActiveExternal(){
+ return (Array.isArray(v2172ExternalCalendarCache)?v2172ExternalCalendarCache:[])
+  .filter(x=>x?.checkIn&&x?.checkOut)
+  .map((d,i)=>({d,i}));
+}
+function v2194Overlap(aIn,aOut,bIn,bOut){
+ return !!aIn&&!!aOut&&!!bIn&&!!bOut&&String(aIn)<String(bOut)&&String(aOut)>String(bIn);
+}
+function v2194ManualRemarks(){
+ try{return JSON.parse(localStorage.getItem("the5r_cal_remarks")||"{}")||{};}catch(_){return {};}
+}
+function v2194RangeNights(ci,co){
+ const out=[];let d=new Date(ci+"T00:00:00"),end=new Date(co+"T00:00:00"),g=0;
+ while(d<end&&g<400){out.push(v2169DateKey(d));d.setDate(d.getDate()+1);g++;}
+ return out;
+}
+function v2194ManualCloseInfo(ci,co){
+ const r=v2194ManualRemarks(),rk=`${ci}_${co}`;
+ if(r[rk])return {manual:true,reason:r[rk].reason||"Manual Close",note:r[rk].note||"",scope:"range"};
+ const nights=v2194RangeNights(ci,co);
+ if(nights.length && nights.every(k=>r["date_"+k])){
+  const reasons=[...new Set(nights.map(k=>r["date_"+k]?.reason||"Manual Close"))];
+  return {manual:true,reason:reasons.join(" / "),note:"",scope:"dates"};
+ }
+ return {manual:false,reason:"",note:"",scope:""};
+}
+function v2194ClassifyExternal(ext){
+ const ci=String(ext.checkIn||"").slice(0,10),co=String(ext.checkOut||"").slice(0,10);
+ const manual=v2194ManualCloseInfo(ci,co);
+ const admin=v2194ActiveAdmin().filter(x=>v2194Overlap(ci,co,String(x.d.checkIn||"").slice(0,10),String(x.d.checkOut||"").slice(0,10)));
+ const exact=admin.filter(x=>String(x.d.checkIn||"").slice(0,10)===ci&&String(x.d.checkOut||"").slice(0,10)===co);
+ const exactAirbnb=exact.find(x=>String(x.d.platform||"").trim().toLowerCase()==="airbnb");
+ const exactDirect=exact.find(x=>String(x.d.platform||"").trim().toLowerCase()==="direct");
+ if(exactAirbnb)return {code:"TALLY",label:"TALLY ✓",admin:exactAirbnb,manual};
+ if(manual.manual && exactDirect)return {code:"DIRECT_CLOSE",label:"DIRECT + MANUAL CLOSE",admin:exactDirect,manual};
+ if(manual.manual)return {code:"MANUAL_CLOSE",label:"MANUAL CLOSE",admin:exact[0]||admin[0]||null,manual};
+ if(exactDirect)return {code:"DIRECT_BLOCK",label:"DIRECT + ABNB BLOCK • TANDA REASON",admin:exactDirect,manual};
+ if(admin.length)return {code:"DATE_MISMATCH",label:"DATE MISMATCH",admin:admin[0],manual};
+ return {code:"MISSING_ADMIN",label:"BELUM MASUK ADMIN",admin:null,manual};
+}
+function v2194ClassifyAdmin(item){
+ const d=item.d,ci=String(d.checkIn||"").slice(0,10),co=String(d.checkOut||"").slice(0,10),p=String(d.platform||"").trim().toLowerCase();
+ if(p==="direct"){
+  const exactExt=v2194ActiveExternal().find(x=>String(x.d.checkIn).slice(0,10)===ci&&String(x.d.checkOut).slice(0,10)===co);
+  if(!exactExt)return {code:"DIRECT",label:"DIRECT",ext:null};
+  const x=v2194ClassifyExternal(exactExt.d);return {...x,ext:exactExt};
+ }
+ const ext=v2194ActiveExternal().filter(x=>v2194Overlap(ci,co,String(x.d.checkIn).slice(0,10),String(x.d.checkOut).slice(0,10)));
+ const exact=ext.find(x=>String(x.d.checkIn).slice(0,10)===ci&&String(x.d.checkOut).slice(0,10)===co);
+ if(exact)return {code:"TALLY",label:"TALLY ✓",ext:exact};
+ if(ext.length)return {code:"DATE_MISMATCH",label:"DATE MISMATCH",ext:ext[0]};
+ return {code:"NO_AIRBNB",label:"SEMAK AIRBNB / CANCEL",ext:null};
+}
+function v2194StateClass(code){
+ if(code==="TALLY")return "tally";
+ if(["MANUAL_CLOSE","DIRECT_CLOSE"].includes(code))return "close";
+ if(code==="DIRECT")return "direct";
+ if(["DATE_MISMATCH","DIRECT_BLOCK"].includes(code))return "mismatch";
+ return "missing";
+}
+function v2194Esc(v){return typeof esc==="function"?esc(v):String(v??"");}
+
+let v2194TallyDate=new Date();
+
+function v2194DayData(dateKey){
+ const admins=v2194ActiveAdmin().filter(x=>x.d.checkIn&&x.d.checkOut&&dateKey>=String(x.d.checkIn).slice(0,10)&&dateKey<String(x.d.checkOut).slice(0,10));
+ const exts=v2194ActiveExternal().filter(x=>dateKey>=String(x.d.checkIn).slice(0,10)&&dateKey<String(x.d.checkOut).slice(0,10));
+ let primary=null;
+ if(exts.length)primary=v2194ClassifyExternal(exts[0].d);
+ else if(admins.length)primary=v2194ClassifyAdmin(admins[0]);
+ return {admins,exts,primary};
+}
+function v2194MonthLabel(y,m){
+ return new Intl.DateTimeFormat("ms-MY",{month:"long",year:"numeric"}).format(new Date(y,m,1));
+}
+function v2194EnsureTallyCard(target){
+ const isDash=target==="dashboard";
+ const host=isDash?$("v214DashboardPanel"):$("v214UpcomingPanel");
+ if(!host)return null;
+ const id=isDash?"v2194DashboardTallyCalendar":"v2194UpcomingTallyCalendar";
+ let card=$(id);
+ if(!card){
+  card=document.createElement("div");card.id=id;card.className="v2194-tally-card";
+  if(isDash){
+   const anchor=$("v2169CalendarCard");
+   if(anchor&&anchor.parentElement===host)anchor.insertAdjacentElement("afterend",card);
+   else host.appendChild(card);
+  }else{
+   const old=$("v2193UpcomingCalendar");
+   if(old)old.style.display="none";
+   const head=host.querySelector(".v214-section-head");
+   if(head)head.insertAdjacentElement("afterend",card);else host.insertBefore(card,host.firstChild);
+  }
+ }
+ return card;
+}
+function v2194RenderTallyCard(target){
+ const card=v2194EnsureTallyCard(target);if(!card)return;
+ const y=v2194TallyDate.getFullYear(),m=v2194TallyDate.getMonth(),today=localTodayISO();
+ const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();
+ let cells=["Ahd","Isn","Sel","Rab","Kha","Jum","Sab"].map(x=>`<div class="v2194-dow">${x}</div>`).join("");
+ for(let i=0;i<first.getDay();i++)cells+="<div></div>";
+ for(let day=1;day<=days;day++){
+  const k=`${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`,x=v2194DayData(k);
+  const has=x.admins.length||x.exts.length,admin=x.admins[0],ext=x.exts[0],state=x.primary;
+  const adminName=admin?(admin.d.guestName||admin.d.guest||"Guest"):"—";
+  const adminPlatform=admin?String(admin.d.platform||""):"";
+  const abnbText=ext?"ABNB ✓":"ABNB —";
+  let adminText=admin?`ADMIN ${adminPlatform==="Direct"?"DIRECT ":""}${adminName}`:"ADMIN —";
+  const badge=state?`<span class="v2194-state ${v2194StateClass(state.code)}">${v2194Esc(state.label)}</span>`:"";
+  cells+=`<div class="v2194-day ${has?"clickable":""} ${k===today?"today":""}" data-v2194-date="${k}" ${has?`onclick="v2194OpenDate('${k}')"`:""}><div class="v2194-num">${day}</div><span class="v2194-slot ${ext?"abnb":"none"}">${v2194Esc(abnbText)}</span><span class="v2194-slot ${admin?(adminPlatform==="Direct"?"direct":"admin"):"none"}">${v2194Esc(adminText)}</span>${badge}</div>`;
+ }
+ card.innerHTML=`
+  <div class="v2194-tally-head">
+   <div><div class="v2194-tally-title">📅 AIRBNB ↔ ADMIN TALLY — ${v2194Esc(v2194MonthLabel(y,m))}</div><div class="v2194-tally-sub">Tally ikut RANGE Check-in → Check-out. Tarikh sama = TALLY. Range berbeza = DATE MISMATCH. Manual close tidak dikira guest.</div></div>
+   <div class="v2194-nav"><button type="button" onclick="v2194Move(-1)">‹</button><button type="button" onclick="v2194Today()">Today</button><button type="button" onclick="v2194Move(1)">›</button></div>
+  </div>
+  <div class="v2194-grid">${cells}</div>
+  <div class="v2194-legend"><span>ABNB = iCal Airbnb</span><span>ADMIN = rekod guest sistem</span><span>TALLY ✓ = range sama</span><span>DATE MISMATCH = range tak sama</span><span>MANUAL CLOSE = bukan guest</span></div>`;
+}
+function v2194RenderAllTally(){
+ v2194RenderTallyCard("upcoming");
+ v2194RenderTallyCard("dashboard");
+}
+function v2194Move(step){v2194TallyDate.setMonth(v2194TallyDate.getMonth()+Number(step||0));v2194RenderAllTally();}
+function v2194Today(){v2194TallyDate=new Date();v2194RenderAllTally();}
+
+function v2194EnsureCloseModal(){
+ let m=$("v2194CloseModal");if(m)return m;
+ m=document.createElement("div");m.id="v2194CloseModal";
+ m.innerHTML=`<div class="box"><h3 id="v2194CloseTitle">Airbnb / iCal Detail</h3><div id="v2194CloseMeta" class="v2194-modal-meta"></div><select id="v2194CloseReason"><option>Tiada booking selepas 10:00 pagi</option><option>Cleaner tiada / tidak available</option><option>Cuti / kegunaan sendiri</option><option>Maintenance / servis</option><option>Kegunaan sendiri / owner</option><option>Lain-lain</option></select><textarea id="v2194CloseNote" placeholder="Nota tambahan (pilihan)"></textarea><div class="v2194-modal-actions"><button id="v2194CloseSave" class="v2194-save">TANDA MANUAL CLOSE</button><button id="v2194CloseRemove" class="v2194-remove">BUANG MANUAL CLOSE</button><button class="v2194-cancel" onclick="v2194CloseModal()">TUTUP</button></div></div>`;
+ document.body.appendChild(m);
+ m.addEventListener("click",e=>{if(e.target===m)v2194CloseModal();});
+ return m;
+}
+let v2194ModalRange={ci:"",co:"",dateKey:""};
+function v2194OpenRangeClose(ci,co,dateKey){
+ const m=v2194EnsureCloseModal(),info=v2194ManualCloseInfo(ci,co);
+ v2194ModalRange={ci,co,dateKey};
+ $("v2194CloseTitle").textContent="Airbnb / iCal — Manual Close / Override";
+ $("v2194CloseMeta").innerHTML=`Range Airbnb: <b>${v2194Esc(ci)} → ${v2194Esc(co)}</b><br>Gunakan hanya jika ini BUKAN booking Airbnb guest — contoh cleaner tiada, cuti, maintenance atau tutup selepas 10:00 pagi.`;
+ $("v2194CloseReason").value=info.manual&&info.reason?info.reason:"Tiada booking selepas 10:00 pagi";
+ $("v2194CloseNote").value=info.note||"";
+ $("v2194CloseRemove").style.display=info.manual?"inline-flex":"none";
+ $("v2194CloseSave").onclick=()=>v2194SaveRangeClose();
+ $("v2194CloseRemove").onclick=()=>v2194RemoveRangeClose();
+ m.classList.add("show");
+}
+function v2194CloseModal(){$("v2194CloseModal")?.classList.remove("show");}
+async function v2194SaveRangeClose(){
+ const {ci,co}=v2194ModalRange;if(!ci||!co)return;
+ const reason=$("v2194CloseReason")?.value||"Lain-lain",note=($("v2194CloseNote")?.value||"").trim();
+ const rk=`${ci}_${co}`,n=994;
+ // Reuse the existing dashboard Calendar Remarks writer so both calendars share one source of truth.
+ let sel=document.createElement("select");sel.id=`v2187R_${n}`;sel.style.display="none";let opt=document.createElement("option");opt.value=reason;opt.textContent=reason;sel.appendChild(opt);sel.value=reason;
+ let inp=document.createElement("input");inp.id=`v2187N_${n}`;inp.style.display="none";inp.value=note;
+ document.body.append(sel,inp);
+ try{
+  if(typeof window.v2187Mark==="function")await window.v2187Mark(rk,n);
+  else throw new Error("Calendar reason writer tidak tersedia.");
+ }finally{sel.remove();inp.remove();}
+ v2194CloseModal();v2194RenderAllTally();
+}
+async function v2194RemoveRangeClose(){
+ const {ci,co}=v2194ModalRange;if(!ci||!co)return;
+ const rk=`${ci}_${co}`;
+ if(typeof window.v2187Unmark==="function")await window.v2187Unmark(rk);
+ v2194CloseModal();v2194RenderAllTally();
+}
+function v2194OpenDate(dateKey){
+ const x=v2194DayData(dateKey);
+ if(x.admins.length===1){viewBooking(x.admins[0].i);return;}
+ if(x.admins.length>1){
+  if(typeof window.v2186OpenDay==="function"){window.v2186OpenDay(dateKey);return;}
+  viewBooking(x.admins[0].i);return;
+ }
+ if(x.exts.length){
+  const e=x.exts[0].d,ci=String(e.checkIn).slice(0,10),co=String(e.checkOut).slice(0,10);
+  const st=v2194ClassifyExternal(e);
+  if(st.code==="MISSING_ADMIN"||st.code==="MANUAL_CLOSE"||st.code==="DIRECT_BLOCK"){
+   v2194OpenRangeClose(ci,co,dateKey);return;
+  }
+  if(typeof window.v2186OpenDay==="function")window.v2186OpenDay(dateKey);
+ }
+}
+
+// -------- 14-DAY DASHBOARD OPERATION WINDOW --------
+function v2194WithinOpsWindow(d,st){
+ const today=localTodayISO(),futureEnd=v2194DateAdd(today,14),pastStart=v2194DateAdd(today,-14);
+ const ci=String(d?.checkIn||"").slice(0,10),co=String(d?.checkOut||"").slice(0,10);
+ if(st?.key==="poststay"||st?.key==="checkout_overdue")return !!co&&co>=pastStart&&co<=today;
+ return !!ci && ci<=futureEnd && (!co||co>=today);
+}
+
+v2169RefreshActionCenter=function(){
+ const host=$("dashActionNeeded")?.parentElement;if(!host)return;
+ let el=$("v2169ActionSummary");
+ if(!el){el=document.createElement("div");el.id="v2169ActionSummary";el.className="v2169-action-summary";host.insertBefore(el,$("dashActionNeeded"));}
+ const today=localTodayISO(),futureEnd=v2194DateAdd(today,14);
+ const active=(bookingCache||[]).filter(d=>{
+  if(v2194IsCancelled(d)||v2194IsCompleted(d))return false;
+  const ci=String(d.checkIn||"").slice(0,10),co=String(d.checkOut||"").slice(0,10);
+  return ci&&ci<=futureEnd&&(!co||co>=today);
+ });
+ const checkin=active.filter(d=>d.checkIn===today).length;
+ const sdPending=active.filter(d=>{const dep=Number(d.securityDeposit??300),paid=(d.transactions||[]).filter(t=>String(t.type||"").toLowerCase()==="security deposit"&&!t.voided).reduce((s,t)=>s+Number(t.amount||0),0);return dep>paid;}).length;
+ const outstanding=active.reduce((s,d)=>s+Math.max(0,Number(d.balance||0)),0);
+ const refundPending=(bookingCache||[]).filter(d=>{
+  const co=String(d.checkOut||"").slice(0,10);
+  return co&&co>=v2194DateAdd(today,-14)&&co<=today&&depositTrackerStatus(d)==="REFUND PENDING";
+ }).length;
+ el.innerHTML=`<div class="v2169-action-box"><div class="n">${checkin}</div><div class="l">CHECK-IN TODAY</div></div><div class="v2169-action-box"><div class="n">${sdPending}</div><div class="l">SD PENDING • 14 HARI</div></div><div class="v2169-action-box"><div class="n">RM ${outstanding.toFixed(0)}</div><div class="l">OUTSTANDING • 14 HARI</div></div><div class="v2169-action-box"><div class="n">${refundPending}</div><div class="l">REFUND • 14 HARI</div></div>`;
+};
+
+v2177RenderActionNeeded=function(){
+ const box=$("dashActionNeeded");if(!box||!Array.isArray(bookingCache))return;
+ const items=bookingCache.map((d,i)=>({d,i,st:v2177OpsState(d)})).filter(x=>{
+  if(v2177IsCancelled(x.d)||v21716CompletionReady(x.d))return false;
+  if(!v2194WithinOpsWindow(x.d,x.st))return false;
+  if(x.st.key==="poststay")return true;
+  const critical=["checkout_overdue","checkout_today","checkin_overdue","checkin_today","stay"].includes(x.st.key);
+  const days=v216Days(x.d.checkIn),pi=v216PaymentInfo(x.d);
+  const money=Number(x.d.balance||0)>0;
+  const sdDue=String(pi.label||"").includes("PENDING")||String(pi.label||"").includes("PARTIAL");
+  return critical||money||sdDue||(days>=0&&days<=14);
+ }).sort((a,b)=>{
+  const p={checkout_overdue:0,checkout_today:1,poststay:2,checkin_overdue:3,checkin_today:4,stay:5,upcoming:6,active:7};
+  return (p[a.st.key]??9)-(p[b.st.key]??9)||String(a.d.checkIn||"").localeCompare(String(b.d.checkIn||""));
+ });
+ const sec=document.querySelector(".v61-action h3");if(sec)sec.textContent="Action Needed — 14 Hari";
+ const mini=document.querySelector(".v61-action .v60-mini");if(mini)mini.textContent="Hanya operasi guest dalam ±14 hari. Future guest lain kekal di Upcoming.";
+ box.innerHTML=items.length?items.map(x=>{
+  const d=x.d,pi=v216PaymentInfo(d),st=x.st,badge=v2177StateChip(d);
+  return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${badge}</div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions v2177-today-actions">${v2177PrimaryActions(d,x.i)}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;
+ }).join(""):'<div class="v60-mini">Tiada tindakan guest dalam tempoh 14 hari.</div>';
+ if(typeof v2189RenderWaAlerts==="function")v2189RenderWaAlerts();
+};
+
+// Final dashboard wrapper: preserve all existing calculations, then apply the owner's clean view.
+const v2194BaseUpdateDashboard=updateDashboard;
+updateDashboard=function(){
+ v2194BaseUpdateDashboard();
+ v2169RefreshActionCenter();
+ v2177RenderActionNeeded();
+ v2194RenderAllTally();
+ document.querySelectorAll("#v21715NextUpcoming,#v21715IntegrityWatch,#v21715SdDetail").forEach(el=>el.style.display="none");
+};
+window.updateDashboard=updateDashboard;
+
+// Final tab wrapper: keep Upcoming full list, plus the same Tally calendar at the top.
+const v2194BaseActivateTab=v214ActivateTab;
+v214ActivateTab=function(name){
+ v2194BaseActivateTab(name);
+ if(name==="upcoming")setTimeout(()=>{v2194RenderTallyCard("upcoming");$("v2193UpcomingCalendar")?.style.setProperty("display","none","important");},80);
+ if(name==="dashboard")setTimeout(()=>{v2194RenderTallyCard("dashboard");},80);
+};
+window.v214ActivateTab=v214ActivateTab;
+
+Object.assign(window,{
+ v2194Move,v2194Today,v2194OpenDate,v2194OpenRangeClose,v2194CloseModal,
+ v2194SaveRangeClose,v2194RemoveRangeClose,v2194RenderAllTally
+});
+
+setTimeout(()=>{try{v2194RenderAllTally();v2169RefreshActionCenter();v2177RenderActionNeeded();}catch(e){console.warn("V2.19.4 init",e)}},1900);
+window.THE5R_DASHBOARD_CLEAN_VERSION="V2.19.4_14DAY_TALLY";
+
+
+// ============================================================
+// V2.19.5 — ERROR MONTH → DATE → GUEST REQUEST PREFILL
+// Error month is clickable. Opens Upcoming tally calendar at that month,
+// highlights unmatched dates, then the date gives Guest Request / Manual Close choices.
+// ============================================================
+
+function v2195MonthIssues(monthKey){
+ const events=(typeof v2192CurrentEvents==="function"?v2192CurrentEvents():[])
+  .filter(e=>v2192MonthKey(e.checkIn)===monthKey)
+  .filter(e=>!(typeof v2194ManualCloseInfo==="function"&&v2194ManualCloseInfo(String(e.checkIn||"").slice(0,10),String(e.checkOut||"").slice(0,10)).manual));
+ const admins=(Array.isArray(bookingCache)?bookingCache:[])
+  .filter(b=>String(b.platform||"").trim().toLowerCase()==="airbnb")
+  .filter(b=>!["cancelled","rejected"].includes(String(b.status||"").toLowerCase()))
+  .filter(b=>String(b.checkIn||"").slice(0,7)===monthKey);
+
+ const usedAdmin=new Set(),usedEvent=new Set(),issues=[];
+ events.forEach((e,ei)=>{
+  const ai=admins.findIndex((b,idx)=>!usedAdmin.has(idx)&&String(b.checkIn||"").slice(0,10)===String(e.checkIn||"").slice(0,10)&&String(b.checkOut||"").slice(0,10)===String(e.checkOut||"").slice(0,10));
+  if(ai>=0){usedEvent.add(ei);usedAdmin.add(ai);}
+ });
+ events.forEach((e,ei)=>{
+  if(usedEvent.has(ei))return;
+  const overlap=admins.find((b,idx)=>!usedAdmin.has(idx)&&v2194Overlap(String(e.checkIn).slice(0,10),String(e.checkOut).slice(0,10),String(b.checkIn||"").slice(0,10),String(b.checkOut||"").slice(0,10)));
+  issues.push({type:overlap?"DATE_MISMATCH":"MISSING_ADMIN",checkIn:String(e.checkIn).slice(0,10),checkOut:String(e.checkOut).slice(0,10),event:e,admin:overlap||null});
+ });
+ admins.forEach((b,idx)=>{
+  if(usedAdmin.has(idx))return;
+  const already=issues.some(x=>x.admin===b);
+  if(!already)issues.push({type:"NO_AIRBNB",checkIn:String(b.checkIn||"").slice(0,10),checkOut:String(b.checkOut||"").slice(0,10),event:null,admin:b});
+ });
+ return issues;
+}
+
+function v2195OpenMonthIssues(monthKey){
+ const issues=v2195MonthIssues(monthKey);
+ if(!issues.length){alert("Bulan ini sudah TALLY. Tiada error untuk disemak.");return;}
+ const [y,m]=monthKey.split("-").map(Number);
+ v2194TallyDate=new Date(y,m-1,1);
+ v214ActivateTab("upcoming");
+ setTimeout(()=>{
+  v2194RenderTallyCard("upcoming");
+  const card=$("v2194UpcomingTallyCalendar");
+  if(card)card.scrollIntoView({behavior:"smooth",block:"start"});
+  issues.forEach(x=>{
+   const el=document.querySelector(`#v2194UpcomingTallyCalendar [data-v2194-date="${x.checkIn}"]`);
+   if(el)el.classList.add("v2195-error-date");
+  });
+  const first=document.querySelector(`#v2194UpcomingTallyCalendar [data-v2194-date="${issues[0].checkIn}"]`);
+  if(first)setTimeout(()=>first.scrollIntoView({behavior:"smooth",block:"center"}),180);
+ },140);
+}
+
+function v2195EnsureIssueModal(){
+ let m=$("v2195IssueModal");if(m)return m;
+ m=document.createElement("div");m.id="v2195IssueModal";
+ m.innerHTML=`<div class="box"><h3 id="v2195IssueTitle">Semak Airbnb / Admin</h3><div id="v2195IssueMeta" class="v2195-issue-meta"></div><div id="v2195IssueActions" class="v2195-issue-actions"></div></div>`;
+ document.body.appendChild(m);
+ m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("show");});
+ return m;
+}
+let v2195CurrentIssue=null;
+
+function v2195OpenIssueChoice(issue){
+ const m=v2195EnsureIssueModal();v2195CurrentIssue=issue;
+ const ci=issue.checkIn||"",co=issue.checkOut||"";
+ $("v2195IssueTitle").textContent=issue.type==="DATE_MISMATCH"?"⚠ DATE MISMATCH":issue.type==="NO_AIRBNB"?"⚠ ADMIN ADA • AIRBNB TIADA":"⚠ AIRBNB ADA • ADMIN BELUM ADA";
+ $("v2195IssueMeta").innerHTML=`Range: <b>${v2194Esc(ci)} → ${v2194Esc(co)}</b><br>${issue.type==="MISSING_ADMIN"?"Pilih Guest Request jika ini booking guest sebenar. Pilih Manual Close jika tarikh Airbnb memang ditutup sendiri.":issue.type==="DATE_MISMATCH"?"Tarikh Airbnb dan Admin bertindih tetapi range tidak sama. Semak guest atau betulkan tarikh.":"Semak sama ada booking Airbnb dibatalkan / berubah."}`;
+ let html="";
+ if(issue.event){
+  html+=`<button class="v2195-request-btn" onclick="v2195StartGuestRequest('${v2194Esc(ci)}','${v2194Esc(co)}')">+ GUEST REQUEST — TARIKH SIAP ISI</button>`;
+  html+=`<button class="v2195-close-btn" onclick="v2195IssueManualClose('${v2194Esc(ci)}','${v2194Esc(co)}')">🔒 MANUAL CLOSE / REASON</button>`;
+ }
+ if(issue.admin){
+  const idx=bookingCache.indexOf(issue.admin);
+  if(idx>=0)html+=`<button class="v2195-view-btn" onclick="document.getElementById('v2195IssueModal').classList.remove('show');viewBooking(${idx})">VIEW ADMIN GUEST</button>`;
+ }
+ html+=`<button class="v2195-view-btn" onclick="document.getElementById('v2195IssueModal').classList.remove('show')">TUTUP</button>`;
+ $("v2195IssueActions").innerHTML=html;m.classList.add("show");
+}
+
+// Enhance tally date click: if the date belongs to a reconciliation issue,
+// show the choice panel instead of forcing only Manual Close.
+const v2195BaseOpenDate=v2194OpenDate;
+v2194OpenDate=function(dateKey){
+ const month=String(dateKey).slice(0,7),issues=v2195MonthIssues(month);
+ const issue=issues.find(x=>dateKey>=x.checkIn&&dateKey<x.checkOut);
+ if(issue){v2195OpenIssueChoice(issue);return;}
+ return v2195BaseOpenDate(dateKey);
+};
+window.v2194OpenDate=v2194OpenDate;
+
+function v2195EnsureRequestForm(){
+ const panel=$("v214RequestsPanel");if(!panel)return null;
+ let form=$("v2195RequestForm");
+ if(!form){
+  form=document.createElement("div");form.id="v2195RequestForm";form.className="hidden";
+  form.innerHTML=`<div class="v2192-head"><div><div class="v2192-title">+ Admin Guest Request</div><div class="v2192-note">Tarikh diambil terus daripada Airbnb/iCal. Isi detail guest sahaja.</div></div></div>
+  <div class="v2195-form-grid">
+   <div><label>Nama Guest</label><input id="v2195ReqName" autocomplete="name"></div>
+   <div><label>Telefon</label><input id="v2195ReqPhone" inputmode="tel"></div>
+   <div><label>Check-in</label><input id="v2195ReqCheckIn" type="date" readonly></div>
+   <div><label>Check-out</label><input id="v2195ReqCheckOut" type="date" readonly></div>
+   <div><label>Adults</label><input id="v2195ReqAdults" type="number" min="0" value="1"></div>
+   <div><label>Children</label><input id="v2195ReqChildren" type="number" min="0" value="0"></div>
+   <div><label>Vehicles</label><input id="v2195ReqVehicles" type="number" min="0" value="1"></div>
+   <div><label>Bahasa Guest</label><select id="v2195ReqLang"><option value="BM">BM</option><option value="EN">EN</option></select></div>
+  </div>
+  <div style="margin-top:9px"><label>Catatan</label><textarea id="v2195ReqNotes" placeholder="Contoh: Airbnb booking — detail dimasukkan oleh Admin"></textarea></div>
+  <div class="v2195-form-actions"><button type="button" class="v2195-request-btn" onclick="v2195SaveGuestRequest()">SIMPAN GUEST REQUEST</button><button type="button" class="v2195-view-btn" onclick="v2195CancelGuestRequestForm()">BATAL</button></div>
+  <div id="v2195ReqStatus" class="status"></div>`;
+  const list=$("pendingRequestsCard");
+  if(list&&list.parentElement===panel)panel.insertBefore(form,list);else panel.insertBefore(form,panel.firstChild);
+ }
+ return form;
+}
+
+function v2195StartGuestRequest(ci,co){
+ $("v2195IssueModal")?.classList.remove("show");
+ v214ActivateTab("requests");
+ setTimeout(()=>{
+  const f=v2195EnsureRequestForm();if(!f)return;
+  f.classList.remove("hidden");
+  $("v2195ReqName").value="";
+  $("v2195ReqPhone").value="";
+  $("v2195ReqCheckIn").value=ci;
+  $("v2195ReqCheckOut").value=co;
+  $("v2195ReqAdults").value=1;$("v2195ReqChildren").value=0;$("v2195ReqVehicles").value=1;
+  $("v2195ReqLang").value=$("v2162DefaultLang")?.value||"BM";
+  $("v2195ReqNotes").value="Airbnb/iCal booking — tarikh auto-fill oleh Admin.";
+  $("v2195ReqStatus").textContent=`Tarikh ${ci} → ${co} sudah diisi. Isi nama/telefon/detail guest sahaja.`;
+  f.scrollIntoView({behavior:"smooth",block:"start"});setTimeout(()=>$("v2195ReqName")?.focus(),180);
+ },100);
+}
+
+async function v2195SaveGuestRequest(){
+ const name=($("v2195ReqName")?.value||"").trim(),phone=($("v2195ReqPhone")?.value||"").trim();
+ const checkIn=$("v2195ReqCheckIn")?.value||"",checkOut=$("v2195ReqCheckOut")?.value||"";
+ if(!name){alert("Masukkan nama guest.");$("v2195ReqName")?.focus();return;}
+ if(!checkIn||!checkOut){alert("Tarikh tidak lengkap.");return;}
+ const adults=Number($("v2195ReqAdults")?.value||0),children=Number($("v2195ReqChildren")?.value||0),vehicles=Number($("v2195ReqVehicles")?.value||0);
+ const nights=Math.max(1,Math.round((new Date(checkOut+"T00:00:00")-new Date(checkIn+"T00:00:00"))/86400000));
+ try{
+  $("v2195ReqStatus").textContent="Menyimpan Guest Request...";
+  await addDoc(collection(db,"bookingRequests"),{
+   guestName:name,phone,checkIn,checkOut,nights,
+   adults,children,vehicles,guests:Math.max(1,adults+children),
+   guestLanguage:$("v2195ReqLang")?.value||"BM",
+   notes:($("v2195ReqNotes")?.value||"").trim(),
+   platformSource:"Airbnb",source:"Admin from Airbnb iCal",status:"Pending",
+   createdAt:serverTimestamp(),updatedAt:serverTimestamp()
+  });
+  await loadPendingRequests();
+  $("v2195ReqStatus").className="status ok";
+  $("v2195ReqStatus").textContent="✅ Guest Request disimpan. Tarikh sudah kekal daripada Airbnb/iCal.";
+  $("v2195RequestForm")?.classList.add("hidden");
+  alert("✅ Guest Request berjaya dibuat. Seterusnya guna flow RM200 / Create Booking seperti biasa.");
+ }catch(e){
+  $("v2195ReqStatus").className="status err";$("v2195ReqStatus").textContent="Gagal: "+(e?.message||e);
+ }
+}
+function v2195CancelGuestRequestForm(){$("v2195RequestForm")?.classList.add("hidden");}
+function v2195IssueManualClose(ci,co){
+ $("v2195IssueModal")?.classList.remove("show");
+ v2194OpenRangeClose(ci,co,ci);
+}
+Object.assign(window,{
+ v2195OpenMonthIssues,v2195OpenIssueChoice,v2195StartGuestRequest,v2195SaveGuestRequest,
+ v2195CancelGuestRequestForm,v2195IssueManualClose
+});
+window.THE5R_ERROR_TO_REQUEST_VERSION="V2.19.5_ERROR_TO_REQUEST";
+
+// ============================================================
+// V2.19.6 — GUEST REQUEST CALENDAR
+// Same Airbnb↔Admin calendar also appears in Guest Requests.
+// Adds a third REQUEST row so pending request dates are easy to check.
+// ============================================================
+
+function v2196ActiveRequests(){
+ return (Array.isArray(pendingRequestCache)?pendingRequestCache:[])
+  .map((r,i)=>({r,i}))
+  .filter(x=>{
+   const st=typeof requestStage==="function"?requestStage(x.r.status):String(x.r.status||"").toUpperCase();
+   return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase()) && x.r.checkIn && x.r.checkOut;
+  });
+}
+function v2196RequestsForDate(dateKey){
+ return v2196ActiveRequests().filter(x=>
+  dateKey>=String(x.r.checkIn||"").slice(0,10) &&
+  dateKey<String(x.r.checkOut||"").slice(0,10)
+ );
+}
+function v2196EnsureRequestCalendar(){
+ const panel=$("v214RequestsPanel"); if(!panel)return null;
+ let card=$("v2196RequestTallyCalendar");
+ if(!card){
+  card=document.createElement("div");
+  card.id="v2196RequestTallyCalendar";
+  card.className="v2194-tally-card";
+  const reqForm=$("v2195RequestForm");
+  const list=$("pendingRequestsCard");
+  if(reqForm&&reqForm.parentElement===panel)panel.insertBefore(card,reqForm);
+  else if(list&&list.parentElement===panel)panel.insertBefore(card,list);
+  else panel.insertBefore(card,panel.firstChild);
+ }
+ return card;
+}
+function v2196RenderRequestCalendar(){
+ const card=v2196EnsureRequestCalendar(); if(!card)return;
+ const y=v2194TallyDate.getFullYear(),m=v2194TallyDate.getMonth(),today=localTodayISO();
+ const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();
+ let cells=["Ahd","Isn","Sel","Rab","Kha","Jum","Sab"].map(x=>`<div class="v2194-dow">${x}</div>`).join("");
+ for(let i=0;i<first.getDay();i++)cells+="<div></div>";
+ for(let day=1;day<=days;day++){
+  const k=`${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  const x=v2194DayData(k),reqs=v2196RequestsForDate(k);
+  const admin=x.admins[0],ext=x.exts[0],state=x.primary,req=reqs[0];
+  const has=x.admins.length||x.exts.length||reqs.length;
+  const adminName=admin?(admin.d.guestName||admin.d.guest||"Guest"):"—";
+  const adminPlatform=admin?String(admin.d.platform||""):"";
+  const abnbText=ext?"ABNB ✓":"ABNB —";
+  const adminText=admin?`ADMIN ${adminPlatform==="Direct"?"DIRECT ":""}${adminName}`:"ADMIN —";
+  const reqName=req?(req.r.guestName||"Guest Request"):"—";
+  const reqText=req?`REQUEST ${reqName}${reqs.length>1?` +${reqs.length-1}`:""}`:"REQUEST —";
+  const badge=state?`<span class="v2194-state ${v2194StateClass(state.code)}">${v2194Esc(state.label)}</span>`:"";
+  cells+=`<div class="v2194-day ${has?"clickable":""} ${k===today?"today":""}" data-v2196-date="${k}" ${has?`onclick="v2196OpenRequestDate('${k}')"`:""}>
+   <div class="v2194-num">${day}</div>
+   <span class="v2194-slot ${ext?"abnb":"none"}">${v2194Esc(abnbText)}</span>
+   <span class="v2194-slot ${admin?(adminPlatform==="Direct"?"direct":"admin"):"none"}">${v2194Esc(adminText)}</span>
+   <span class="v2194-slot ${req?"request":"none"}">${v2194Esc(reqText)}</span>
+   ${badge}
+  </div>`;
+ }
+ card.innerHTML=`
+  <div class="v2194-tally-head">
+   <div>
+    <div class="v2194-tally-title">📅 GUEST REQUEST DATE CHECK — ${v2194Esc(v2194MonthLabel(y,m))}</div>
+    <div class="v2194-tally-sub">Calendar sama: ABNB + ADMIN + REQUEST. Mudah nampak sama ada tarikh guest request bertindih / sudah ada booking.</div>
+   </div>
+   <div class="v2194-nav">
+    <button type="button" onclick="v2196Move(-1)">‹</button>
+    <button type="button" onclick="v2196Today()">Today</button>
+    <button type="button" onclick="v2196Move(1)">›</button>
+   </div>
+  </div>
+  <div class="v2194-grid">${cells}</div>
+  <div class="v2194-legend">
+   <span>ABNB = Airbnb/iCal</span>
+   <span>ADMIN = booking sistem</span>
+   <span>REQUEST = Guest Request belum converted</span>
+  </div>`;
+}
+function v2196Move(step){
+ v2194TallyDate.setMonth(v2194TallyDate.getMonth()+Number(step||0));
+ v2196RenderRequestCalendar();
+}
+function v2196Today(){
+ v2194TallyDate=new Date();
+ v2196RenderRequestCalendar();
+}
+function v2196OpenRequestDate(dateKey){
+ const reqs=v2196RequestsForDate(dateKey);
+ if(reqs.length){
+  const lines=reqs.map(x=>{
+   const r=x.r;
+   const st=typeof requestStage==="function"?requestStage(r.status):String(r.status||"Pending");
+   return `${r.guestName||"Guest"} • ${r.checkIn||"-"} → ${r.checkOut||"-"} • ${st}`;
+  }).join("\n");
+  alert("GUEST REQUEST PADA TARIKH INI:\n\n"+lines+"\n\nSenarai penuh ada di bawah calendar.");
+  $("pendingRequestsCard")?.scrollIntoView({behavior:"smooth",block:"start"});
+  return;
+ }
+ // No request on that day: preserve normal tally / issue behavior.
+ return v2194OpenDate(dateKey);
+}
+
+// Keep REQUEST calendar refreshed when request data reloads.
+const v2196BaseLoadPendingRequests=loadPendingRequests;
+loadPendingRequests=async function(){
+ const result=await v2196BaseLoadPendingRequests();
+ try{v2196RenderRequestCalendar();}catch(e){console.warn("V2.19.6 request calendar refresh",e);}
+ return result;
+};
+window.loadPendingRequests=loadPendingRequests;
+
+// Show the calendar every time Guest Requests tab opens.
+const v2196BaseActivateTab=v214ActivateTab;
+v214ActivateTab=function(name){
+ v2196BaseActivateTab(name);
+ if(name==="requests")setTimeout(()=>{v2196RenderRequestCalendar();},90);
+};
+window.v214ActivateTab=v214ActivateTab;
+
+// Add request-specific calendar color.
+(function(){
+ if($("v2196RequestCalendarStyle"))return;
+ const s=document.createElement("style");
+ s.id="v2196RequestCalendarStyle";
+ s.textContent=`
+  .v2194-slot.request{background:#f3e8ff;color:#6b21a8}
+  #v2196RequestTallyCalendar{margin-top:10px}
+ `;
+ document.head.appendChild(s);
+})();
+
+Object.assign(window,{v2196RenderRequestCalendar,v2196Move,v2196Today,v2196OpenRequestDate});
+setTimeout(()=>{try{v2196RenderRequestCalendar();}catch(e){console.warn("V2.19.6 init",e)}},1900);
+window.THE5R_REQUEST_CALENDAR_VERSION="V2.19.6_REQUEST_CALENDAR";
+
+
+// ============================================================
+// V2.19.7 — NAV HEALTH INDICATORS
+// Dashboard / Guest Requests / Upcoming show RED when Admin action/check is needed.
+// They turn GREEN automatically when the underlying issue is corrected.
+// ============================================================
+
+function v2197AllCurrentFutureIssues(){
+ const nowMonth=localTodayISO().slice(0,7);
+ const months=new Set();
+ try{
+  (typeof v2192CurrentEvents==="function"?v2192CurrentEvents():[]).forEach(e=>{
+   const k=String(e.checkIn||"").slice(0,7); if(k>=nowMonth)months.add(k);
+  });
+ }catch(_){}
+ (Array.isArray(bookingCache)?bookingCache:[]).forEach(b=>{
+  if(String(b.platform||"").trim().toLowerCase()!=="airbnb")return;
+  if(["cancelled","rejected"].includes(String(b.status||"").toLowerCase()))return;
+  const k=String(b.checkIn||"").slice(0,7); if(k>=nowMonth)months.add(k);
+ });
+ const issues=[];
+ [...months].sort().forEach(k=>{
+  try{
+   if(typeof v2195MonthIssues==="function")issues.push(...v2195MonthIssues(k).map(x=>({...x,month:k})));
+  }catch(e){console.warn("Nav health issue calc",k,e);}
+ });
+ return issues;
+}
+function v2197ActiveRequestCount(){
+ try{
+  return (Array.isArray(pendingRequestCache)?pendingRequestCache:[]).filter(r=>{
+   const st=typeof requestStage==="function"?requestStage(r.status):String(r.status||"").toUpperCase();
+   return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase());
+  }).length;
+ }catch(_){return 0;}
+}
+function v2197EnsureStyle(){
+ if($("v2197NavHealthStyle"))return;
+ const s=document.createElement("style");
+ s.id="v2197NavHealthStyle";
+ s.textContent=`
+  .v2197-health{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;margin-left:6px;border-radius:999px;font-size:10px;font-weight:950;vertical-align:middle;box-sizing:border-box}
+  .v2197-health.red{background:#dc2626;color:#fff;box-shadow:0 0 0 2px rgba(220,38,38,.12)}
+  .v2197-health.green{background:#16a34a;color:#fff;box-shadow:0 0 0 2px rgba(22,163,74,.12)}
+  .v2197-health.amber{background:#d97706;color:#fff;box-shadow:0 0 0 2px rgba(217,119,6,.12)}
+ `;
+ document.head.appendChild(s);
+}
+function v2197Badge(btn,id){
+ if(!btn)return null;
+ let b=$(id);
+ if(!b){
+  b=document.createElement("span");
+  b.id=id;b.className="v2197-health green";b.textContent="✓";
+  btn.appendChild(b);
+ }
+ return b;
+}
+function v2197SetBadge(el,count,label=""){
+ if(!el)return;
+ const n=Number(count||0);
+ el.className="v2197-health "+(n>0?"red":"green");
+ el.textContent=n>0?String(n):"✓";
+ el.title=n>0?`${n} perkara perlu disemak${label?": "+label:""}`:"Tiada error / semua tally";
+}
+function v2197RefreshNavHealth(){
+ v2197EnsureStyle();
+ const issues=v2197AllCurrentFutureIssues();
+ const globalCount=issues.length;
+ const activeReq=v2197ActiveRequestCount();
+
+ const dashBtn=document.querySelector('[data-v214-tab="dashboard"]');
+ const reqBtn=document.querySelector('[data-v214-tab="requests"]');
+ const upBtn=document.querySelector('[data-v214-tab="upcoming"]');
+
+ const dashBadge=v2197Badge(dashBtn,"v2197DashHealth");
+ const reqBadge=v2197Badge(reqBtn,"v2197ReqHealth");
+ const upBadge=v2197Badge(upBtn,"v2197UpHealth");
+
+ // Dashboard = overall reconciliation health.
+ v2197SetBadge(dashBadge,globalCount,"Airbnb ↔ Admin");
+
+ // Guest Requests = active request work OR reconciliation issues that may need guest detail.
+ const reqIssueCount=issues.filter(x=>["MISSING_ADMIN","DATE_MISMATCH"].includes(String(x.type||""))).length;
+ v2197SetBadge(reqBadge,activeReq+reqIssueCount,"Guest Request / tarikh");
+
+ // Upcoming = all current/future range mismatches, missing/extra Airbnb records.
+ v2197SetBadge(upBadge,globalCount,"Upcoming / tarikh");
+
+ // Existing request number badge is preserved; make it green when zero for quick status reading.
+ const old=$("v214RequestBadge");
+ if(old){
+  const n=activeReq;
+  old.style.background=n>0?"#e11d48":"#16a34a";
+  old.style.color="#fff";
+  old.textContent=n>0?String(n):"✓";
+  old.title=n>0?`${n} Guest Request aktif`:"Tiada Guest Request aktif";
+ }
+
+ return {issues,globalCount,activeReq,reqIssueCount};
+}
+
+// Refresh indicators after all relevant actions/data refreshes.
+const v2197BaseLoadPendingRequests=loadPendingRequests;
+loadPendingRequests=async function(){
+ const r=await v2197BaseLoadPendingRequests();
+ setTimeout(v2197RefreshNavHealth,30);
+ return r;
+};
+window.loadPendingRequests=loadPendingRequests;
+
+const v2197BaseDashboard=updateDashboard;
+updateDashboard=function(){
+ v2197BaseDashboard();
+ setTimeout(v2197RefreshNavHealth,30);
+};
+window.updateDashboard=updateDashboard;
+
+const v2197BaseSync=v2172SyncAllCalendars;
+v2172SyncAllCalendars=async function(showAlert=true){
+ const r=await v2197BaseSync(showAlert);
+ setTimeout(v2197RefreshNavHealth,80);
+ return r;
+};
+window.v2172SyncAllCalendars=v2172SyncAllCalendars;
+
+const v2197BaseActivate=v214ActivateTab;
+v214ActivateTab=function(name){
+ v2197BaseActivate(name);
+ setTimeout(v2197RefreshNavHealth,50);
+};
+window.v214ActivateTab=v214ActivateTab;
+
+// Manual-close and Guest Request save flows already refresh their own data.
+// This periodic lightweight refresh keeps the nav color current after edits/corrections.
+setInterval(()=>{try{v2197RefreshNavHealth();}catch(_){}},15000);
+setTimeout(()=>{try{v2197RefreshNavHealth();}catch(e){console.warn("V2.19.7 nav health init",e)}},2100);
+
+Object.assign(window,{v2197RefreshNavHealth,v2197AllCurrentFutureIssues});
+window.THE5R_NAV_HEALTH_VERSION="V2.19.7_NAV_HEALTH";
+
 window.THE5R_ADMIN_VERSION="V2.18.9_ALERT_ONE_CLICK_WHATSAPP";
 
 // ============================================================
@@ -7714,23 +8624,55 @@ function v2192Monthly(){
  const events=v2192CurrentEvents();
  const admin=Array.isArray(bookingCache)?bookingCache:[];
  const keys=new Set();
- events.forEach(e=>keys.add(v2192MonthKey(e.checkIn)));
- admin.filter(b=>String(b.platform||"").trim().toLowerCase()==="airbnb"&&b.checkIn).forEach(b=>keys.add(v2192MonthKey(b.checkIn)));
 
  const now=localTodayISO().slice(0,7);
+
+ // Current + future months only. Past months are intentionally hidden.
+ events.forEach(e=>{const k=v2192MonthKey(e.checkIn);if(k>=now)keys.add(k);});
+ admin.filter(b=>String(b.platform||"").trim().toLowerCase()==="airbnb"&&b.checkIn).forEach(b=>{
+  const k=v2192MonthKey(b.checkIn);if(k>=now)keys.add(k);
+ });
+
  const [yy,mm]=now.split("-").map(Number);
- for(let i=0;i<5;i++){
+ for(let i=0;i<6;i++){
   const d=new Date(yy,mm-1+i,1);
   keys.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
  }
- return [...keys].filter(Boolean).sort().slice(0,8).map(k=>{
-  const ical=events.filter(e=>v2192MonthKey(e.checkIn)===k).length;
-  const adminCount=admin.filter(b=>
+
+ return [...keys].filter(k=>k&&k>=now).sort().slice(0,8).map(k=>{
+  // Manual-close Airbnb/iCal ranges are operational closures, NOT guest bookings.
+  // Exclude them from monthly guest reconciliation.
+  const iCalRows=events.filter(e=>
+   v2192MonthKey(e.checkIn)===k &&
+   !(typeof v2194ManualCloseInfo==="function" && v2194ManualCloseInfo(String(e.checkIn||"").slice(0,10),String(e.checkOut||"").slice(0,10)).manual)
+  );
+  const adminRows=admin.filter(b=>
    String(b.platform||"").trim().toLowerCase()==="airbnb" &&
    v2192MonthKey(b.checkIn)===k &&
    !["cancelled","rejected"].includes(String(b.status||"").toLowerCase())
-  ).length;
-  return {key:k,ical,admin:adminCount};
+  );
+  const ical=iCalRows.length,adminCount=adminRows.length;
+
+  // Range-aware monthly reconciliation:
+  // exact Check-in→Check-out pairs cancel each other out.
+  const remainingIcal=[...iCalRows];
+  const remainingAdmin=[...adminRows];
+  const matchedIcal=new Set(),matchedAdmin=new Set();
+
+  remainingIcal.forEach((e,ei)=>{
+   const ai=remainingAdmin.findIndex((b,idx)=>
+    !matchedAdmin.has(idx) &&
+    String(b.checkIn||"").slice(0,10)===String(e.checkIn||"").slice(0,10) &&
+    String(b.checkOut||"").slice(0,10)===String(e.checkOut||"").slice(0,10)
+   );
+   if(ai>=0){matchedIcal.add(ei);matchedAdmin.add(ai);}
+  });
+
+  const unmatchedIcal=remainingIcal.filter((_,i)=>!matchedIcal.has(i));
+  const unmatchedAdmin=remainingAdmin.filter((_,i)=>!matchedAdmin.has(i));
+  const needCheck=Math.max(unmatchedIcal.length,unmatchedAdmin.length);
+
+  return {key:k,ical,admin:adminCount,needCheck,ok:needCheck===0};
  });
 }
 function v2192OpenChanges(){
@@ -7750,6 +8692,23 @@ function v2192EnsureStyle(){
  .v2192-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
  .v2192-month{padding:10px;border:1px solid #dbeafe;border-radius:12px;background:#fff}
  .v2192-month .m{font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase}.v2192-month .n{font-size:24px;font-weight:950;color:#173b62;margin-top:3px}.v2192-month .s{font-size:10px;color:#64748b;line-height:1.35}
+ .v2192-month .err{display:inline-block;margin-top:6px;border-radius:999px;padding:4px 7px;background:#fee2e2;color:#991b1b;font-size:9px;font-weight:950}
+ .v2192-month .ok{display:inline-block;margin-top:6px;border-radius:999px;padding:4px 7px;background:#dcfce7;color:#166534;font-size:9px;font-weight:950}
+ .v2195-month-error{cursor:pointer;box-shadow:inset 0 0 0 2px #fca5a5}.v2195-month-error:hover{background:#fff7f7}
+ .v2195-error-date{outline:3px solid #dc2626!important;outline-offset:2px;animation:v2195pulse 1s ease-in-out 2}
+ @keyframes v2195pulse{50%{box-shadow:0 0 0 5px rgba(220,38,38,.16)}}
+ #v2195IssueModal{position:fixed;inset:0;background:rgba(15,23,42,.48);z-index:100001;display:none;align-items:center;justify-content:center;padding:16px}
+ #v2195IssueModal.show{display:flex}#v2195IssueModal .box{width:min(540px,96vw);background:#fff;border-radius:16px;padding:16px;box-shadow:0 20px 55px rgba(15,23,42,.28)}
+ #v2195IssueModal h3{margin:0 0 7px}.v2195-issue-meta{font-size:12px;color:#64748b;line-height:1.55}
+ .v2195-issue-actions{display:grid;gap:8px;margin-top:13px}.v2195-issue-actions button{border:0;border-radius:10px;padding:11px 12px;font-weight:900;cursor:pointer}
+ .v2195-request-btn{background:#0f6fb5;color:#fff}.v2195-close-btn{background:#475569;color:#fff}.v2195-view-btn{background:#e2e8f0;color:#334155}
+ #v2195RequestForm{margin:12px 0;padding:14px;border:1px solid #bfdbfe;border-radius:14px;background:#f8fbff}
+ #v2195RequestForm.hidden{display:none}.v2195-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ #v2195RequestForm label{display:block;font-size:11px;font-weight:850;color:#334155;margin-bottom:4px}
+ #v2195RequestForm input,#v2195RequestForm textarea,#v2195RequestForm select{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:9px;font:inherit;background:#fff}
+ #v2195RequestForm textarea{min-height:70px;resize:vertical}.v2195-form-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.v2195-form-actions button{border:0;border-radius:9px;padding:10px 12px;font-weight:900;cursor:pointer}
+ @media(max-width:650px){.v2195-form-grid{grid-template-columns:1fr}}
+
  .v2192-summary{margin-top:11px;font-size:11px;font-weight:850;color:#334155}
  .v2192-list{display:grid;gap:8px;margin-top:10px}.v2192-item{padding:10px;border-radius:11px;border:1px solid #dbeafe;background:#fff}
  .v2192-item.new{border-color:#86efac;background:#f0fdf4}.v2192-item.removed{border-color:#fca5a5;background:#fff7f7}
@@ -7791,9 +8750,9 @@ function v2192RenderMonitor(){
    <button type="button" class="v2192-sync" onclick="v2192SyncAndCheck()">↻ SYNC & CHECK AIRBNB</button>
   </div>
   <div class="v2192-grid">
-   ${months.map(x=>`<div class="v2192-month"><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">iCal booking • Admin detail ${x.admin}</div></div>`).join("")}
+   ${months.map(x=>`<div class="v2192-month ${x.needCheck>0?"v2195-month-error":""}" ${x.needCheck>0?`onclick="v2195OpenMonthIssues('${x.key}')"`:""}><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">ABNB ${x.ical} • ADMIN ${x.admin}</div>${x.needCheck>0?`<span class="err">⚠ ERROR • ${x.needCheck} NEED TO CHECK • TEKAN</span>`:`<span class="ok">✓ TALLY</span>`}</div>`).join("")}
   </div>
-  <div class="v2192-summary">iCal aktif: ${eventCount} • NEW belum semak: ${nNew} • REMOVED / semak cancel: ${nRemoved}</div>
+  <div class="v2192-summary">Bulan lepas disembunyikan • Error dikira automatik ikut range Check-in → Check-out. Bila data sudah tally selepas Sync, error hilang sendiri.</div>
   <div class="v2192-list">
    ${changes.length?changes.slice(0,12).map(x=>`<div class="v2192-item ${x.type==="NEW"?"new":"removed"}"><div class="v2192-row"><div><div class="v2192-who">${x.type==="NEW"?"🟢 NEW AIRBNB BOOKING":"🔴 AIRBNB BLOCK REMOVED — SEMAK CANCEL"}</div><div class="v2192-meta">${v2192Esc(x.checkIn)} → ${v2192Esc(x.checkOut)}<br>${x.type==="NEW"?"Semak nama guest di Airbnb kemudian isi detail Admin.":"Semak Airbnb dahulu. Admin tidak auto-cancel."}</div></div><div class="v2192-actions"><button class="v2192-use" onclick="v2192UseDates('${v2192Esc(x.checkIn)}','${v2192Esc(x.checkOut)}')">${x.type==="NEW"?"GUNA TARIKH":"SEMAK TARIKH"}</button><button class="v2192-done" onclick="v2192Resolve('${v2192Esc(x.key)}')">SUDAH SEMAK</button></div></div></div>`).join(""):'<div class="v2192-note">Tiada perubahan Airbnb baharu sejak perbandingan terakhir.</div>'}
   </div>`;
