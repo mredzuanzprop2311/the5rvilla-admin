@@ -2088,6 +2088,7 @@ $("save").onclick=async()=>{
 async function findBookingConflict(data, editId=""){
  const checkIn=String(data?.checkIn||"");
  const checkOut=String(data?.checkOut||"");
+ const requestedPlatform=String(data?.platform||$("platform")?.value||"").trim().toLowerCase();
  if(!checkIn || !checkOut) return null;
 
  const overlaps=(aIn,aOut)=>!!aIn && !!aOut && checkIn < aOut && checkOut > aIn;
@@ -2136,18 +2137,23 @@ async function findBookingConflict(data, editId=""){
   // Ignore only the edited Airbnb booking's own exact original/proposed range.
   if(
    editId &&
-   editingBooking &&
-   String(editingBooking.platform||editingBooking.source||"").trim().toLowerCase()==="airbnb" &&
    d.icalManaged===true &&
    calendarPlatform==="airbnb"
   ){
    const blockIn=String(d.checkIn||"");
    const blockOut=String(d.checkOut||"");
-   const originalIn=String(editingBooking.checkIn||"");
-   const originalOut=String(editingBooking.checkOut||"");
-   const sameOriginal=blockIn===originalIn && blockOut===originalOut;
+   const editingPlatform=String(editingBooking?.platform||editingBooking?.source||requestedPlatform||"").trim().toLowerCase();
+   const originalIn=String(editingBooking?.checkIn||"");
+   const originalOut=String(editingBooking?.checkOut||"");
+   const sameOriginal=!!editingBooking && blockIn===originalIn && blockOut===originalOut;
    const sameProposed=blockIn===checkIn && blockOut===checkOut;
-   if(sameOriginal || sameProposed) continue;
+
+   // Existing Airbnb booking may be represented twice:
+   // 1) Admin booking record
+   // 2) Airbnb iCal publicAvailability block.
+   // While editing an Airbnb booking, the exact iCal block for the proposed
+   // dates is the same reservation, so it must not disable Update Booking.
+   if(editingPlatform==="airbnb" && (sameOriginal || sameProposed)) continue;
   }
 
   if(d.icalManaged===true && calendarPlatform && calendarPlatform!=="airbnb") continue;
