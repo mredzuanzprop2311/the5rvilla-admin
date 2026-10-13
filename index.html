@@ -3085,6 +3085,15 @@ function requestStage(status){
  if(["rejected","cancelled"].includes(s)) return "REJECTED";
  return "NEW";
 }
+function v2203RequestNeedsRm200(r){
+ const p=String(r?.platformSource||r?.platform||"Direct").trim().toLowerCase();
+ if(r?.noRm200===true)return false;
+ return p==="direct";
+}
+function v2203RequestEffectiveStage(r){
+ if(!v2203RequestNeedsRm200(r))return "READY";
+ return requestStage(r?.status);
+}
 async function loadPendingRequests(){
  const box=$("pendingRequests"),count=$("pendingCount"); if(!box||!count)return;
  try{
@@ -3094,17 +3103,22 @@ async function loadPendingRequests(){
   count.textContent=pendingRequestCache.length+" Active";
   if($("v214RequestBadge")) $("v214RequestBadge").textContent=pendingRequestCache.length;
   box.innerHTML=pendingRequestCache.length?pendingRequestCache.map((d,i)=>{
-   const stage=requestStage(d.status),cls=stage==="AWAITING"?"awaiting":stage==="READY"?"ready":"new";
-   const label=stage==="AWAITING"?"AWAITING RM200":stage==="READY"?"RM200 RECEIVED • READY":"NEW REQUEST";
+   const rawStage=requestStage(d.status),needsRm200=v2203RequestNeedsRm200(d),stage=v2203RequestEffectiveStage(d);
+   const cls=stage==="AWAITING"?"awaiting":stage==="READY"?"ready":"new";
+   const label=!needsRm200?"NO RM200 • READY":stage==="AWAITING"?"AWAITING RM200":stage==="READY"?"RM200 RECEIVED • READY":"NEW REQUEST";
    const guests=Number(d.guests||((Number(d.adults)||0)+(Number(d.children)||0))||0);
    let actions="";
-   if(stage==="NEW") actions=`<button class="green" onclick="sendRequestPayment(${i})">Send RM200 Payment</button>${v2164RequestMoreMenu(i,"NEW")}`;
-   if(stage==="AWAITING") actions=`<button class="green" onclick="markRequestPaid(${i})">Mark RM200 Paid</button><button class="blue" onclick="requestPaymentReminder(${i})">WA Reminder</button>${v2164RequestMoreMenu(i,"AWAITING")}`;
-   if(stage==="READY") actions=`<button class="blue" onclick="createBookingFromRequest(${i})">Create Booking</button>${v2164RequestMoreMenu(i,"READY")}`;
+   if(!needsRm200){
+    actions=`<button class="blue" onclick="createBookingFromRequest(${i})">Create Booking</button>${v2164RequestMoreMenu(i,"READY")}`;
+   }else{
+    if(stage==="NEW") actions=`<button class="green" onclick="sendRequestPayment(${i})">Send RM200 Payment</button>${v2164RequestMoreMenu(i,"NEW")}`;
+    if(stage==="AWAITING") actions=`<button class="green" onclick="markRequestPaid(${i})">Mark RM200 Paid</button><button class="blue" onclick="requestPaymentReminder(${i})">WA Reminder</button>${v2164RequestMoreMenu(i,"AWAITING")}`;
+    if(stage==="READY") actions=`<button class="blue" onclick="createBookingFromRequest(${i})">Create Booking</button>${v2164RequestMoreMenu(i,"READY")}`;
+   }
    return `<div class="v214-request-card ${cls}">
     <div class="v214-request-top"><div><div class="v214-request-name">${esc(d.guestName||"-")}</div><div class="v214-request-meta">${esc(d.phone||"-")} • ${esc(d.adults||0)} Adults • ${esc(d.children||0)} Children • ${esc(d.vehicles||0)} Cars</div></div><span class="v214-statuspill ${cls}">${label}</span></div>
     <div class="v214-request-date">${esc(d.checkIn||"-")} → ${esc(d.checkOut||"-")} • ${guests} tetamu</div>
-    <div class="v214-request-meta">Direct${d.residence?` • ${esc(d.residence)}`:""}${d.notes?` • ${esc(d.notes)}`:""}</div>
+    <div class="v214-request-meta">${esc(d.platformSource||d.platform||"Direct")}${d.residence?` • ${esc(d.residence)}`:""}${d.notes?` • ${esc(d.notes)}`:""}</div>
     <div class="v214-request-actions">${actions}</div>
    </div>`;
   }).join(""):'<div class="status ok">Tiada active request.</div>';
@@ -3117,6 +3131,7 @@ function v2164ViewRequest(i){
   "GUEST REQUEST\n\n"+
   "Nama: "+(r.guestName||"-")+"\n"+
   "Phone: "+(r.phone||"-")+"\n"+
+  "Platform: "+(r.platformSource||r.platform||"Direct")+"\n"+
   "Check-in: "+(r.checkIn||"-")+"\n"+
   "Check-out: "+(r.checkOut||"-")+"\n"+
   "Adults: "+(r.adults||0)+"\n"+
@@ -3132,6 +3147,7 @@ function v2164RequestMoreMenu(i,stage){
   <summary>⋮ More</summary>
   <div class="v2163-more-menu">
    <button class="gray" onclick="v2164ViewRequest(${i});this.closest('details').removeAttribute('open')">View Request</button>
+   <button class="blue" onclick="v2202EditRequest(${i});this.closest('details').removeAttribute('open')">Edit Request</button>
    <button class="v2163-danger" onclick="rejectGuestRequest(${i});this.closest('details').removeAttribute('open')">${cancelLabel}</button>
   </div>
  </details>`;
@@ -3143,6 +3159,7 @@ function requestPhone(r){let ph=String(r.phone||"").replace(/\D/g,"");if(ph.star
 function openRequestWA(r,msg){window.open("https://wa.me/"+requestPhone(r)+"?text="+encodeURIComponent(msg),"_blank");}
 async function sendRequestPayment(i){
  const r=pendingRequestCache[i];if(!r)return;
+ if(!v2203RequestNeedsRm200(r)){alert("Platform ini tidak perlu RM200.");return;}
  try{
   await updateDoc(doc(db,"bookingRequests",r.id),{status:"AwaitingPayment",lockAmount:200,paymentRequestedAt:serverTimestamp(),updatedAt:serverTimestamp()});
   openRequestWA(r,`Assalamualaikum / Hi ${r.guestName||"Guest"},
@@ -3160,6 +3177,7 @@ Terima kasih.`);
 }
 async function markRequestPaid(i){
  const r=pendingRequestCache[i];if(!r)return;
+ if(!v2203RequestNeedsRm200(r)){alert("Platform ini tidak perlu RM200.");return;}
  if(!confirm("Confirm RM200 telah diterima daripada "+(r.guestName||"guest")+"?"))return;
  try{await updateDoc(doc(db,"bookingRequests",r.id),{status:"ReadyToCreate",lockAmount:Number(r.lockAmount||200),lockPaid:200,lockPaidAt:serverTimestamp(),updatedAt:serverTimestamp()});await loadPendingRequests();}
  catch(e){alert("Gagal simpan bayaran request: "+e.message);}
@@ -3176,29 +3194,55 @@ Terima kasih.`);
 }
 async function createBookingFromRequest(i){
  const r=pendingRequestCache[i];if(!r)return;
- if(requestStage(r.status)!=="READY"){alert("RM200 belum ditanda sebagai diterima.");return;}
- if(!confirm("Create booking Direct untuk "+(r.guestName||"guest")+"? RM200 akan direkod sebagai Booking Lock."))return;
+ const requestPlatform=String(r.platformSource||r.platform||"Direct").trim()||"Direct";
+ const needsRm200=v2203RequestNeedsRm200(r);
+ if(needsRm200 && requestStage(r.status)!=="READY"){alert("RM200 belum ditanda sebagai diterima.");return;}
+ const confirmText=needsRm200
+  ? "Create booking "+requestPlatform+" untuk "+(r.guestName||"guest")+"? RM200 akan direkod sebagai Booking Lock."
+  : "Create booking "+requestPlatform+" untuk "+(r.guestName||"guest")+"? Platform ini tidak memerlukan RM200.";
+ if(!confirm(confirmText))return;
  try{
-  const conflict=await findBookingConflict({checkIn:r.checkIn,checkOut:r.checkOut},"");
-  if(conflict){alert("Tarikh sudah bertindih dengan booking lain ("+(conflict.platform||conflict.source||"Booking")+": "+conflict.checkIn+" → "+conflict.checkOut+").");return;}
+  const conflict=await findBookingConflict({checkIn:r.checkIn,checkOut:r.checkOut,platform:requestPlatform},"");
+  if(conflict){
+   const exactIcalSameRange=
+    requestPlatform.toLowerCase()==="airbnb" &&
+    isAirbnbConflict(conflict) &&
+    String(conflict.sourceType||"")==="publicAvailability" &&
+    String(conflict.checkIn||"").slice(0,10)===String(r.checkIn||"").slice(0,10) &&
+    String(conflict.checkOut||"").slice(0,10)===String(r.checkOut||"").slice(0,10);
+   if(!exactIcalSameRange){
+    alert("Tarikh sudah bertindih dengan booking lain ("+(conflict.platform||conflict.source||"Booking")+": "+conflict.checkIn+" → "+conflict.checkOut+").");
+    return;
+   }
+  }
   const bookingNo=await getNextBookingNo(),receiptNo=bookingNo.replace("5RV-BKG-","5RV-RCP-");
-  const lockPaid=Number(r.lockPaid||r.lockAmount||200);
-  const transactions=[{type:"Booking Payment",date:localTodayISO(),amount:lockPaid,note:"Booking Lock / Guest Request (counts toward SD)"}];
+  const lockPaid=needsRm200?Number(r.lockPaid||r.lockAmount||200):0;
+  const transactions=needsRm200
+   ? [{type:"Booking Payment",date:localTodayISO(),amount:lockPaid,note:"Booking Lock / Guest Request (counts toward SD)"}]
+   : [];
   const base={
    guestName:r.guestName||"",phone:r.phone||"",residence:r.residence||"",
    adults:Number(r.adults)||0,children:Number(r.children)||0,vehicles:Number(r.vehicles)||0,
    guests:Number(r.guests)||((Number(r.adults)||0)+(Number(r.children)||0)||1),
    checkIn:r.checkIn||"",checkOut:r.checkOut||"",nights:Number(r.nights)||0,
-   platform:"Direct",status:"Confirmed",rent:0,securityDeposit:300,deposit:300,
-   notes:r.notes||"Created dari Guest Request selepas RM200 Booking Lock",
+   platform:requestPlatform,status:"Confirmed",rent:0,securityDeposit:300,deposit:300,
+   notes:r.notes||(needsRm200
+    ? "Created dari "+requestPlatform+" Guest Request selepas RM200 Booking Lock"
+    : "Created dari "+requestPlatform+" Guest Request • No RM200 required"),
    bookingNo,receiptNo,requestId:r.id,transactions
   };
   const m=paymentMathFromBooking(base,transactions);
   const bookingRef=await addDoc(collection(db,"bookings"),{...base,grossDue:m.due,totalIncoming:m.incoming,totalRefund:m.refunds,netPaid:m.netPaid,balance:m.balance,paymentStatus:m.status,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
   await updateDoc(doc(db,"bookingRequests",r.id),{status:"Converted",bookingNo,bookingId:bookingRef.id,convertedAt:serverTimestamp(),updatedAt:serverTimestamp()});
-  await syncDirectToPublic();await load();
+  if(requestPlatform.toLowerCase()==="direct")await syncDirectToPublic();
+  await load();
   const idx=bookingCache.findIndex(x=>x.id===bookingRef.id);
-  if(idx>=0){editBooking(idx);$("formTitle").textContent="Lengkapkan Booking — "+bookingNo;$("save").textContent="Simpan Harga & Detail";$("rent").focus();alert("✅ "+bookingNo+" telah dibuat.\\nRM200 Booking Lock direkod.\\nData guest sudah auto-transfer. Lengkapkan harga dan detail lain.");}
+  if(idx>=0){
+   editBooking(idx);$("formTitle").textContent="Lengkapkan Booking — "+bookingNo;$("save").textContent="Simpan Harga & Detail";$("rent").focus();
+   alert(needsRm200
+    ? "✅ "+bookingNo+" telah dibuat.\\nRM200 Booking Lock direkod.\\nData guest sudah auto-transfer. Lengkapkan harga dan detail lain."
+    : "✅ "+bookingNo+" telah dibuat.\\nTiada RM200 diperlukan.\\nData guest sudah auto-transfer. Lengkapkan harga dan detail lain.");
+  }
   else alert("✅ "+bookingNo+" telah dibuat dan Calendar sudah BLOCKED.");
  }catch(e){alert("Create booking gagal: "+e.message);}
 }
@@ -7756,7 +7800,7 @@ window.THE5R_UPCOMING_CALENDAR_VERSION="V2.19.3_CLICK_TO_GUEST";
    .v2194-tally-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
    .v2194-tally-title{font-size:17px;font-weight:900;color:#173b62}
    .v2194-tally-sub{font-size:11px;color:#64748b;line-height:1.45;margin-top:3px}
-   .v2194-nav{display:flex;gap:6px}.v2194-nav button{border:1px solid #cbd5e1;background:#f8fafc;border-radius:9px;padding:7px 10px;font-weight:850;cursor:pointer}
+   .v2194-nav{display:flex;gap:6px}.v2194-nav button{border:1px solid #cbd5e1;background:#f8fafc;border-radius:9px;padding:7px 10px;font-weight:850;cursor:pointer}.v2194-nav button:disabled{opacity:.35;cursor:not-allowed}
    .v2194-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
    .v2194-dow{text-align:center;font-size:10px;font-weight:900;color:#64748b;padding:3px 0}
    .v2194-day{min-height:76px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;cursor:default;overflow:hidden}
@@ -7767,7 +7811,7 @@ window.THE5R_UPCOMING_CALENDAR_VERSION="V2.19.3_CLICK_TO_GUEST";
    .v2194-slot.none{background:#f1f5f9;color:#64748b}.v2194-slot.direct{background:#dcfce7;color:#166534}
    .v2194-state{display:inline-block;margin-top:4px;border-radius:999px;padding:2px 5px;font-size:7px;font-weight:950}
    .v2194-state.tally{background:#dcfce7;color:#166534}.v2194-state.mismatch{background:#fef3c7;color:#92400e}
-   .v2194-state.missing{background:#fee2e2;color:#991b1b}.v2194-state.close{background:#e2e8f0;color:#334155}.v2194-state.direct{background:#dcfce7;color:#166534}
+   .v2194-state.missing{background:#fee2e2;color:#991b1b}.v2194-state.close{background:#e2e8f0;color:#334155}.v2194-state.direct{background:#dcfce7;color:#166534}.v2194-state.request{background:#f3e8ff;color:#6b21a8}
    .v2194-legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:9px;font-size:10px;color:#64748b;font-weight:750}
    #v2194CloseModal{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100000;display:none;align-items:center;justify-content:center;padding:16px}
    #v2194CloseModal.show{display:flex}
@@ -7859,6 +7903,7 @@ function v2194ClassifyAdmin(item){
 }
 function v2194StateClass(code){
  if(["TALLY","TALLY_DIRECT"].includes(code))return "tally";
+ if(code==="REQUEST_PENDING")return "request";
  if(code==="MANUAL_CLOSE")return "close";
  if(code==="DIRECT")return "direct";
  if(code==="DATE_MISMATCH")return "mismatch";
@@ -7871,10 +7916,20 @@ let v2194TallyDate=new Date();
 function v2194DayData(dateKey){
  const admins=v2194ActiveAdmin().filter(x=>x.d.checkIn&&x.d.checkOut&&dateKey>=String(x.d.checkIn).slice(0,10)&&dateKey<String(x.d.checkOut).slice(0,10));
  const exts=v2194ActiveExternal().filter(x=>dateKey>=String(x.d.checkIn).slice(0,10)&&dateKey<String(x.d.checkOut).slice(0,10));
+ const requests=(Array.isArray(pendingRequestCache)?pendingRequestCache:[]).filter(r=>{
+  const st=typeof requestStage==="function"?requestStage(r.status):String(r.status||"").toUpperCase();
+  return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase())&&r.checkIn&&r.checkOut&&
+         dateKey>=String(r.checkIn).slice(0,10)&&dateKey<String(r.checkOut).slice(0,10);
+ });
  let primary=null;
  if(exts.length)primary=v2194ClassifyExternal(exts[0].d);
  else if(admins.length)primary=v2194ClassifyAdmin(admins[0]);
- return {admins,exts,primary};
+ if(primary?.code==="MISSING_ADMIN"&&exts.length&&requests.length){
+  const e=exts[0].d;
+  const req=requests.find(r=>String(r.checkIn||"").slice(0,10)===String(e.checkIn||"").slice(0,10)&&String(r.checkOut||"").slice(0,10)===String(e.checkOut||"").slice(0,10));
+  if(req)primary={code:"REQUEST_PENDING",label:"REQUEST PENDING",request:req};
+ }
+ return {admins,exts,requests,primary};
 }
 function v2194MonthLabel(y,m){
  return new Intl.DateTimeFormat("ms-MY",{month:"long",year:"numeric"}).format(new Date(y,m,1));
@@ -7918,8 +7973,8 @@ function v2194RenderTallyCard(target){
  }
  card.innerHTML=`
   <div class="v2194-tally-head">
-   <div><div class="v2194-tally-title">📅 AIRBNB ↔ ADMIN TALLY — ${v2194Esc(v2194MonthLabel(y,m))}</div><div class="v2194-tally-sub">Tally ikut RANGE Check-in → Check-out. Tarikh sama = TALLY. Range berbeza = DATE MISMATCH. Manual close tidak dikira guest.</div></div>
-   <div class="v2194-nav"><button type="button" onclick="v2194Move(-1)">‹</button><button type="button" onclick="v2194Today()">Today</button><button type="button" onclick="v2194Move(1)">›</button></div>
+   <div><div class="v2194-tally-title">📅 AIRBNB ↔ ADMIN TALLY — ${v2194Esc(v2194MonthLabel(y,m))}</div><div class="v2194-tally-sub">Tally ikut RANGE Check-in → Check-out. Paparan dihadkan 6 bulan: bulan semasa + 5 bulan seterusnya. Tarikh sama = TALLY. Range berbeza = DATE MISMATCH. Manual close tidak dikira guest.</div></div>
+   <div class="v2194-nav"><button type="button" onclick="v2194Move(-1)" ${v2201AtMin(v2194TallyDate)?"disabled":""}>‹</button><button type="button" onclick="v2194Today()">Today</button><button type="button" onclick="v2194Move(1)" ${v2201AtMax(v2194TallyDate)?"disabled":""}>›</button></div>
   </div>
   <div class="v2194-grid">${cells}</div>
   <div class="v2194-legend"><span>ABNB = iCal Airbnb</span><span>ADMIN = rekod guest sistem</span><span>TALLY ✓ = range sama</span><span>DATE MISMATCH = range tak sama</span><span>MANUAL CLOSE = bukan guest</span></div>`;
@@ -7928,8 +7983,42 @@ function v2194RenderAllTally(){
  v2194RenderTallyCard("upcoming");
  v2194RenderTallyCard("dashboard");
 }
-function v2194Move(step){v2194TallyDate.setMonth(v2194TallyDate.getMonth()+Number(step||0));v2194RenderAllTally();}
-function v2194Today(){v2194TallyDate=new Date();v2194RenderAllTally();}
+
+function v2201MonthStart(d){
+ return new Date(d.getFullYear(),d.getMonth(),1);
+}
+function v2201MinMonth(){
+ const d=new Date();
+ return new Date(d.getFullYear(),d.getMonth(),1);
+}
+function v2201MaxMonth(){
+ const d=v2201MinMonth();
+ return new Date(d.getFullYear(),d.getMonth()+5,1);
+}
+function v2201ClampMonth(d){
+ const x=v2201MonthStart(d),min=v2201MinMonth(),max=v2201MaxMonth();
+ if(x<min)return min;
+ if(x>max)return max;
+ return x;
+}
+function v2201AtMin(d){return v2201MonthStart(d).getTime()===v2201MinMonth().getTime();}
+function v2201AtMax(d){return v2201MonthStart(d).getTime()===v2201MaxMonth().getTime();}function v2204MonthKey(d){
+ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+function v2204InWindowKey(k){
+ const min=v2204MonthKey(v2201MinMonth()),max=v2204MonthKey(v2201MaxMonth());
+ return !!k && k>=min && k<=max;
+}
+
+function v2194Move(step){
+ const next=new Date(v2194TallyDate.getFullYear(),v2194TallyDate.getMonth()+Number(step||0),1);
+ v2194TallyDate=v2201ClampMonth(next);
+ v2194RenderAllTally();
+}
+function v2194Today(){
+ v2194TallyDate=v2201MinMonth();
+ v2194RenderAllTally();
+}
 
 function v2194EnsureCloseModal(){
  let m=$("v2194CloseModal");if(m)return m;
@@ -8078,13 +8167,23 @@ window.THE5R_DASHBOARD_CLEAN_VERSION="V2.19.4_14DAY_TALLY";
 // ============================================================
 
 function v2195MonthIssues(monthKey){
+ if(!v2204InWindowKey(monthKey))return [];
+ const today=localTodayISO();
  const events=(typeof v2192CurrentEvents==="function"?v2192CurrentEvents():[])
   .filter(e=>v2192MonthKey(e.checkIn)===monthKey)
+  .filter(e=>String(e.checkOut||"").slice(0,10)>today)
   .filter(e=>!(typeof v2194ManualCloseInfo==="function"&&v2194ManualCloseInfo(String(e.checkIn||"").slice(0,10),String(e.checkOut||"").slice(0,10)).manual));
  const admins=(Array.isArray(bookingCache)?bookingCache:[])
   .filter(b=>["airbnb","direct"].includes(String(b.platform||"").trim().toLowerCase()))
   .filter(b=>!["cancelled","rejected"].includes(String(b.status||"").toLowerCase()))
-  .filter(b=>String(b.checkIn||"").slice(0,7)===monthKey);
+  .filter(b=>String(b.checkIn||"").slice(0,7)===monthKey)
+  .filter(b=>String(b.checkOut||"").slice(0,10)>today);
+ const activeRequests=(Array.isArray(pendingRequestCache)?pendingRequestCache:[])
+  .filter(r=>{
+   const st=typeof requestStage==="function"?requestStage(r.status):String(r.status||"").toUpperCase();
+   return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase()) &&
+          String(r.checkOut||"").slice(0,10)>today;
+  });
 
  const usedAdmin=new Set(),usedEvent=new Set(),issues=[];
  events.forEach((e,ei)=>{
@@ -8100,8 +8199,11 @@ function v2195MonthIssues(monthKey){
  });
  events.forEach((e,ei)=>{
   if(usedEvent.has(ei))return;
-  const overlap=admins.find((b,idx)=>!usedAdmin.has(idx)&&v2194Overlap(String(e.checkIn).slice(0,10),String(e.checkOut).slice(0,10),String(b.checkIn||"").slice(0,10),String(b.checkOut||"").slice(0,10)));
-  issues.push({type:overlap?"DATE_MISMATCH":"MISSING_ADMIN",checkIn:String(e.checkIn).slice(0,10),checkOut:String(e.checkOut).slice(0,10),event:e,admin:overlap||null});
+  const eIn=String(e.checkIn).slice(0,10),eOut=String(e.checkOut).slice(0,10);
+  const overlap=admins.find((b,idx)=>!usedAdmin.has(idx)&&v2194Overlap(eIn,eOut,String(b.checkIn||"").slice(0,10),String(b.checkOut||"").slice(0,10)));
+  const req=activeRequests.find(r=>String(r.checkIn||"").slice(0,10)===eIn&&String(r.checkOut||"").slice(0,10)===eOut);
+  if(req){issues.push({type:"REQUEST_PENDING",checkIn:eIn,checkOut:eOut,event:e,admin:null,request:req});return;}
+  issues.push({type:overlap?"DATE_MISMATCH":"MISSING_ADMIN",checkIn:eIn,checkOut:eOut,event:e,admin:overlap||null});
  });
  admins.forEach((b,idx)=>{
   if(usedAdmin.has(idx))return;
@@ -8116,7 +8218,7 @@ function v2195OpenMonthIssues(monthKey){
  const issues=v2195MonthIssues(monthKey);
  if(!issues.length){alert("Bulan ini sudah TALLY. Tiada error untuk disemak.");return;}
  const [y,m]=monthKey.split("-").map(Number);
- v2194TallyDate=new Date(y,m-1,1);
+ v2194TallyDate=v2201ClampMonth(new Date(y,m-1,1));
  v214ActivateTab("upcoming");
  setTimeout(()=>{
   v2194RenderTallyCard("upcoming");
@@ -8285,9 +8387,21 @@ function v2196EnsureRequestCalendar(){
  }
  return card;
 }
+let v2196RequestCalDate=new Date();
+function v2196BestRequestMonth(){
+ const today=localTodayISO();
+ const active=v2196ActiveRequests().map(x=>x.r)
+  .filter(r=>String(r.checkOut||"").slice(0,10)>today)
+  .sort((a,b)=>String(a.checkIn||"").localeCompare(String(b.checkIn||"")));
+ if(active.length){
+  const d=new Date(String(active[0].checkIn).slice(0,10)+"T00:00:00");
+  return v2201ClampMonth(new Date(d.getFullYear(),d.getMonth(),1));
+ }
+ return v2201MinMonth();
+}
 function v2196RenderRequestCalendar(){
  const card=v2196EnsureRequestCalendar(); if(!card)return;
- const y=v2194TallyDate.getFullYear(),m=v2194TallyDate.getMonth(),today=localTodayISO();
+ const y=v2196RequestCalDate.getFullYear(),m=v2196RequestCalDate.getMonth(),today=localTodayISO();
  const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();
  let cells=["Ahd","Isn","Sel","Rab","Kha","Jum","Sab"].map(x=>`<div class="v2194-dow">${x}</div>`).join("");
  for(let i=0;i<first.getDay();i++)cells+="<div></div>";
@@ -8318,9 +8432,9 @@ function v2196RenderRequestCalendar(){
     <div class="v2194-tally-sub">Calendar sama: ABNB + ADMIN + REQUEST. Mudah nampak sama ada tarikh guest request bertindih / sudah ada booking.</div>
    </div>
    <div class="v2194-nav">
-    <button type="button" onclick="v2196Move(-1)">‹</button>
+    <button type="button" onclick="v2196Move(-1)" ${v2201AtMin(v2196RequestCalDate)?"disabled":""}>‹</button>
     <button type="button" onclick="v2196Today()">Today</button>
-    <button type="button" onclick="v2196Move(1)">›</button>
+    <button type="button" onclick="v2196Move(1)" ${v2201AtMax(v2196RequestCalDate)?"disabled":""}>›</button>
    </div>
   </div>
   <div class="v2194-grid">${cells}</div>
@@ -8331,11 +8445,12 @@ function v2196RenderRequestCalendar(){
   </div>`;
 }
 function v2196Move(step){
- v2194TallyDate.setMonth(v2194TallyDate.getMonth()+Number(step||0));
+ const next=new Date(v2196RequestCalDate.getFullYear(),v2196RequestCalDate.getMonth()+Number(step||0),1);
+ v2196RequestCalDate=v2201ClampMonth(next);
  v2196RenderRequestCalendar();
 }
 function v2196Today(){
- v2194TallyDate=new Date();
+ v2196RequestCalDate=v2201MinMonth();
  v2196RenderRequestCalendar();
 }
 function v2196OpenRequestDate(dateKey){
@@ -8367,7 +8482,7 @@ window.loadPendingRequests=loadPendingRequests;
 const v2196BaseActivateTab=v214ActivateTab;
 v214ActivateTab=function(name){
  v2196BaseActivateTab(name);
- if(name==="requests")setTimeout(()=>{v2196RenderRequestCalendar();},90);
+ if(name==="requests")setTimeout(()=>{v2196RequestCalDate=v2196BestRequestMonth();v2196RenderRequestCalendar();},90);
 };
 window.v214ActivateTab=v214ActivateTab;
 
@@ -8395,17 +8510,16 @@ window.THE5R_REQUEST_CALENDAR_VERSION="V2.19.6_REQUEST_CALENDAR";
 // ============================================================
 
 function v2197AllCurrentFutureIssues(){
- const nowMonth=localTodayISO().slice(0,7);
  const months=new Set();
  try{
   (typeof v2192CurrentEvents==="function"?v2192CurrentEvents():[]).forEach(e=>{
-   const k=String(e.checkIn||"").slice(0,7); if(k>=nowMonth)months.add(k);
+   const k=String(e.checkIn||"").slice(0,7); if(v2204InWindowKey(k))months.add(k);
   });
  }catch(_){}
  (Array.isArray(bookingCache)?bookingCache:[]).forEach(b=>{
   if(String(b.platform||"").trim().toLowerCase()!=="airbnb")return;
   if(["cancelled","rejected"].includes(String(b.status||"").toLowerCase()))return;
-  const k=String(b.checkIn||"").slice(0,7); if(k>=nowMonth)months.add(k);
+  const k=String(b.checkIn||"").slice(0,7); if(v2204InWindowKey(k))months.add(k);
  });
  const issues=[];
  [...months].sort().forEach(k=>{
@@ -8413,13 +8527,14 @@ function v2197AllCurrentFutureIssues(){
    if(typeof v2195MonthIssues==="function")issues.push(...v2195MonthIssues(k).map(x=>({...x,month:k})));
   }catch(e){console.warn("Nav health issue calc",k,e);}
  });
- return issues;
+ return issues.filter(x=>String(x.type||"")!=="REQUEST_PENDING");
 }
 function v2197ActiveRequestCount(){
  try{
   return (Array.isArray(pendingRequestCache)?pendingRequestCache:[]).filter(r=>{
    const st=typeof requestStage==="function"?requestStage(r.status):String(r.status||"").toUpperCase();
-   return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase());
+   const k=String(r.checkIn||"").slice(0,7);
+   return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase()) && v2204InWindowKey(k);
   }).length;
  }catch(_){return 0;}
 }
@@ -8591,8 +8706,9 @@ function v2199MonthLabel(key){
 }
 function v2199GetScopeIssues(scope){
  const all=typeof v2197AllCurrentFutureIssues==="function"?v2197AllCurrentFutureIssues():[];
- if(scope==="requests")return all.filter(x=>["MISSING_ADMIN","DATE_MISMATCH"].includes(String(x.type||"")));
- return all;
+ const actionable=all.filter(x=>String(x.type||"")!=="REQUEST_PENDING");
+ if(scope==="requests")return actionable.filter(x=>["MISSING_ADMIN","DATE_MISMATCH"].includes(String(x.type||"")));
+ return actionable;
 }
 function v2199OpenErrors(scope="dashboard"){
  const m=v2199EnsureErrorModal();
@@ -8602,7 +8718,7 @@ function v2199OpenErrors(scope="dashboard"){
  $("v2199ErrorTitle").textContent=`${scopeName} — Perlu Semak`;
  $("v2199ErrorSub").textContent=scope==="requests"
    ?`Tarikh Airbnb/Admin yang perlukan detail guest + ${activeReq} Guest Request aktif. Tekan terus untuk pergi ke tarikh masalah.`
-   :"Senarai tepat tarikh/range yang menyebabkan tanda merah. Bila dibetulkan, tanda merah akan hilang automatik.";
+   :"Senarai error hanya untuk 6 bulan operasi semasa. Bila dibetulkan, tanda merah akan hilang automatik.";
 
  if(!issues.length){
   $("v2199ErrorList").innerHTML=`<div class="v2199-ok">✓ Tiada error Airbnb ↔ Admin sekarang.${scope==="requests"&&activeReq?` Masih ada ${activeReq} Guest Request aktif untuk diproses.`:""}</div>`;
@@ -8632,7 +8748,7 @@ function v2199GoIssue(index,scope){
  v2199CloseErrors();
  const month=x.month||String(x.checkIn||"").slice(0,7);
  const [y,m]=month.split("-").map(Number);
- v2194TallyDate=new Date(y,m-1,1);
+ v2194TallyDate=v2201ClampMonth(new Date(y,m-1,1));
  v214ActivateTab("upcoming");
  setTimeout(()=>{
   v2194RenderTallyCard("upcoming");
@@ -8684,6 +8800,129 @@ window.v2197RefreshNavHealth=v2197RefreshNavHealth;
 setTimeout(()=>{try{v2197RefreshNavHealth();v2199WireHealthBadges();}catch(e){console.warn("V2.19.9 error detail init",e)}},2200);
 window.THE5R_ERROR_DETAIL_VERSION="V2.19.9_CLICK_ERROR_DETAIL";
 
+// V2.20.0 — REQUEST ACK + PAST ERROR FILTER + REQUEST CALENDAR MONTH FIX
+window.THE5R_V2200_VERSION="V2.20.0_REQUEST_ACK_PAST_FILTER";
+// V2.20.1 — 6 MONTH CALENDAR WINDOW
+window.THE5R_V2201_VERSION="V2.20.1_6MONTH_WINDOW";
+
+// ============================================================
+// V2.20.2 — EDIT GUEST REQUEST + PLATFORM FIX
+// ============================================================
+function v2202EnsureEditRequestModal(){
+ let m=$("v2202EditRequestModal");if(m)return m;
+ const s=document.createElement("style");
+ s.id="v2202EditRequestStyle";
+ s.textContent=`
+ #v2202EditRequestModal{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100010;display:none;align-items:center;justify-content:center;padding:16px}
+ #v2202EditRequestModal.show{display:flex}
+ #v2202EditRequestModal .box{width:min(620px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;padding:16px;box-shadow:0 22px 65px rgba(15,23,42,.3)}
+ .v2202-title{font-size:18px;font-weight:950;color:#173b62}.v2202-sub{font-size:11px;color:#64748b;margin:4px 0 12px}
+ .v2202-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .v2202-grid label,.v2202-note-label{display:block;font-size:11px;font-weight:850;color:#334155;margin-bottom:4px}
+ .v2202-grid input,.v2202-grid select,#v2202ReqNotes{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:9px;padding:10px;font:inherit;background:#fff}
+ #v2202ReqNotes{min-height:76px;resize:vertical}
+ .v2202-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.v2202-actions button{border:0;border-radius:9px;padding:10px 12px;font-weight:900;cursor:pointer}
+ .v2202-save{background:#0f6fb5;color:#fff}.v2202-cancel{background:#e2e8f0;color:#334155}
+ @media(max-width:650px){.v2202-grid{grid-template-columns:1fr}}
+ `;
+ document.head.appendChild(s);
+ m=document.createElement("div");m.id="v2202EditRequestModal";
+ m.innerHTML=`<div class="box">
+  <div class="v2202-title">Edit Guest Request</div>
+  <div class="v2202-sub">Betulkan platform atau detail sebelum Create Booking. Status RM200 sedia ada dikekalkan.</div>
+  <div class="v2202-grid">
+   <div><label>Nama Guest</label><input id="v2202ReqName"></div>
+   <div><label>Telefon</label><input id="v2202ReqPhone"></div>
+   <div><label>Platform</label><select id="v2202ReqPlatform" onchange="v2203SyncNoRm200FromPlatform()"><option value="Airbnb">Airbnb</option><option value="Direct">Direct</option><option value="Booking.com">Booking.com</option><option value="Agoda">Agoda</option><option value="Trip.com">Trip.com</option><option value="Others">Others</option></select>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-weight:800"><input id="v2203NoRm200" type="checkbox" style="width:auto"> Tak perlu RM200</label>
+    <div id="v2203Rm200Hint" style="font-size:10px;color:#64748b;margin-top:4px">Airbnb/platform lain auto tak perlu RM200. Direct sahaja perlu RM200 kecuali Admin tick ini.</div>
+   </div>
+   <div><label>Bahasa</label><select id="v2202ReqLang"><option value="BM">BM</option><option value="EN">EN</option></select></div>
+   <div><label>Check-in</label><input id="v2202ReqCheckIn" type="date"></div>
+   <div><label>Check-out</label><input id="v2202ReqCheckOut" type="date"></div>
+   <div><label>Adults</label><input id="v2202ReqAdults" type="number" min="0"></div>
+   <div><label>Children</label><input id="v2202ReqChildren" type="number" min="0"></div>
+   <div><label>Vehicles</label><input id="v2202ReqVehicles" type="number" min="0"></div>
+  </div>
+  <div style="margin-top:9px"><label class="v2202-note-label">Catatan</label><textarea id="v2202ReqNotes"></textarea></div>
+  <div class="v2202-actions"><button class="v2202-save" onclick="v2202SaveRequestEdit()">SIMPAN PERUBAHAN</button><button class="v2202-cancel" onclick="v2202CloseRequestEdit()">BATAL</button></div>
+  <div id="v2202ReqEditStatus" class="status"></div>
+ </div>`;
+ document.body.appendChild(m);
+ m.addEventListener("click",e=>{if(e.target===m)v2202CloseRequestEdit();});
+ return m;
+}
+let v2202EditRequestId="";
+function v2202EditRequest(i){
+ const r=pendingRequestCache[i];if(!r)return;
+ const m=v2202EnsureEditRequestModal();v2202EditRequestId=r.id;
+ $("v2202ReqName").value=r.guestName||"";
+ $("v2202ReqPhone").value=r.phone||"";
+ $("v2202ReqPlatform").value=r.platformSource||r.platform||"Direct";
+ $("v2203NoRm200").checked=r.noRm200===true || String(r.platformSource||r.platform||"Direct").toLowerCase()!=="direct";
+ v2203SyncNoRm200FromPlatform(true);
+ $("v2202ReqLang").value=r.guestLanguage||"BM";
+ $("v2202ReqCheckIn").value=r.checkIn||"";
+ $("v2202ReqCheckOut").value=r.checkOut||"";
+ $("v2202ReqAdults").value=Number(r.adults||0);
+ $("v2202ReqChildren").value=Number(r.children||0);
+ $("v2202ReqVehicles").value=Number(r.vehicles||0);
+ $("v2202ReqNotes").value=r.notes||"";
+ $("v2202ReqEditStatus").className="status";
+ $("v2202ReqEditStatus").textContent="";
+ m.classList.add("show");
+}
+function v2202CloseRequestEdit(){$("v2202EditRequestModal")?.classList.remove("show");}
+async function v2202SaveRequestEdit(){
+ if(!v2202EditRequestId)return;
+ const guestName=($("v2202ReqName")?.value||"").trim(),phone=($("v2202ReqPhone")?.value||"").trim();
+ const platformSource=$("v2202ReqPlatform")?.value||"Direct";
+ const noRm200=platformSource.toLowerCase()!=="direct" || !!$("v2203NoRm200")?.checked;
+ const checkIn=$("v2202ReqCheckIn")?.value||"",checkOut=$("v2202ReqCheckOut")?.value||"";
+ const adults=Number($("v2202ReqAdults")?.value||0),children=Number($("v2202ReqChildren")?.value||0),vehicles=Number($("v2202ReqVehicles")?.value||0);
+ if(!guestName){alert("Masukkan nama guest.");return;}
+ if(!checkIn||!checkOut||checkOut<=checkIn){alert("Semak Check-in / Check-out.");return;}
+ const nights=Math.max(1,Math.round((new Date(checkOut+"T00:00:00")-new Date(checkIn+"T00:00:00"))/86400000));
+ try{
+  $("v2202ReqEditStatus").textContent="Menyimpan...";
+  await updateDoc(doc(db,"bookingRequests",v2202EditRequestId),{
+   guestName,phone,platformSource,noRm200,checkIn,checkOut,nights,
+   adults,children,vehicles,guests:Math.max(1,adults+children),
+   guestLanguage:$("v2202ReqLang")?.value||"BM",
+   notes:($("v2202ReqNotes")?.value||"").trim(),
+   updatedAt:serverTimestamp()
+  });
+  await loadPendingRequests();
+  v2202CloseRequestEdit();
+  alert("✅ Guest Request dikemaskini. Platform: "+platformSource);
+ }catch(e){
+  $("v2202ReqEditStatus").className="status err";
+  $("v2202ReqEditStatus").textContent="Gagal: "+(e?.message||e);
+ }
+}
+Object.assign(window,{v2202EditRequest,v2202CloseRequestEdit,v2202SaveRequestEdit});
+window.THE5R_REQUEST_EDIT_VERSION="V2.20.2_REQUEST_EDIT_PLATFORM";
+
+
+// V2.20.3 — RM200 DIRECT ONLY
+function v2203SyncNoRm200FromPlatform(preserveDirect=false){
+ const p=String($("v2202ReqPlatform")?.value||"Direct").toLowerCase();
+ const cb=$("v2203NoRm200"),hint=$("v2203Rm200Hint");
+ if(!cb)return;
+ if(p!=="direct"){
+  cb.checked=true;cb.disabled=true;
+  if(hint)hint.textContent="Platform ini tidak perlu RM200.";
+ }else{
+  cb.disabled=false;
+  if(!preserveDirect)cb.checked=false;
+  if(hint)hint.textContent=cb.checked?"Direct ini ditanda khas: tak perlu RM200.":"Direct: RM200 diperlukan untuk tanda jadi.";
+ }
+}
+Object.assign(window,{v2203RequestNeedsRm200,v2203RequestEffectiveStage,v2203SyncNoRm200FromPlatform});
+window.THE5R_RM200_POLICY_VERSION="V2.20.3_DIRECT_ONLY_RM200";
+
+// V2.20.4 — 6 MONTH ERROR SCOPE FIX
+window.THE5R_V2204_VERSION="V2.20.4_6MONTH_ERROR_SCOPE";
 window.THE5R_ADMIN_VERSION="V2.18.9_ALERT_ONE_CLICK_WHATSAPP";
 
 // ============================================================
@@ -8801,10 +9040,10 @@ function v2192Monthly(){
 
  const now=localTodayISO().slice(0,7);
 
- // Current + future months only. Past months are intentionally hidden.
- events.forEach(e=>{const k=v2192MonthKey(e.checkIn);if(k>=now)keys.add(k);});
+ // Same 6-month scope as the calendars. Ignore older/far-future months.
+ events.forEach(e=>{const k=v2192MonthKey(e.checkIn);if(v2204InWindowKey(k))keys.add(k);});
  admin.filter(b=>String(b.platform||"").trim().toLowerCase()==="airbnb"&&b.checkIn).forEach(b=>{
-  const k=v2192MonthKey(b.checkIn);if(k>=now)keys.add(k);
+  const k=v2192MonthKey(b.checkIn);if(v2204InWindowKey(k))keys.add(k);
  });
 
  const [yy,mm]=now.split("-").map(Number);
@@ -8813,16 +9052,19 @@ function v2192Monthly(){
   keys.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
  }
 
- return [...keys].filter(k=>k&&k>=now).sort().slice(0,8).map(k=>{
+ return [...keys].filter(k=>v2204InWindowKey(k)).sort().slice(0,6).map(k=>{
   // Manual-close Airbnb/iCal ranges are operational closures, NOT guest bookings.
   // Exclude them from monthly guest reconciliation.
+  const today=localTodayISO();
   const iCalRows=events.filter(e=>
    v2192MonthKey(e.checkIn)===k &&
+   String(e.checkOut||"").slice(0,10)>today &&
    !(typeof v2194ManualCloseInfo==="function" && v2194ManualCloseInfo(String(e.checkIn||"").slice(0,10),String(e.checkOut||"").slice(0,10)).manual)
   );
   const adminRows=admin.filter(b=>
    ["airbnb","direct"].includes(String(b.platform||"").trim().toLowerCase()) &&
    v2192MonthKey(b.checkIn)===k &&
+   String(b.checkOut||"").slice(0,10)>today &&
    !["cancelled","rejected"].includes(String(b.status||"").toLowerCase())
   );
   const ical=iCalRows.length,adminCount=adminRows.length;
@@ -8845,8 +9087,13 @@ function v2192Monthly(){
    if(ai>=0){matchedIcal.add(ei);matchedAdmin.add(ai);}
   });
 
-  const unmatchedIcal=remainingIcal.filter((_,i)=>!matchedIcal.has(i));
+  let unmatchedIcal=remainingIcal.filter((_,i)=>!matchedIcal.has(i));
   const unmatchedAdmin=remainingAdmin.filter((_,i)=>!matchedAdmin.has(i));
+  const reqs=(Array.isArray(pendingRequestCache)?pendingRequestCache:[]).filter(r=>{
+   const st=typeof requestStage==="function"?requestStage(r.status):String(r.status||"").toUpperCase();
+   return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase());
+  });
+  unmatchedIcal=unmatchedIcal.filter(e=>!reqs.some(r=>String(r.checkIn||"").slice(0,10)===String(e.checkIn||"").slice(0,10)&&String(r.checkOut||"").slice(0,10)===String(e.checkOut||"").slice(0,10)));
   const needCheck=Math.max(unmatchedIcal.length,unmatchedAdmin.length);
 
   return {key:k,ical,admin:adminCount,needCheck,ok:needCheck===0};
