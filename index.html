@@ -2162,8 +2162,9 @@ async function findBookingConflict(data, editId=""){
 
   return {
    id:ds.id,
-   source:String(d.source||d.platform||"Calendar"),
-   platform:String(d.platform||d.source||"Calendar"),
+   source:String(d.source||d.platform||d.calendarPlatform||"Calendar"),
+   platform:String(d.platform||d.source||d.calendarPlatform||"Calendar"),
+   calendarPlatform:String(d.calendarPlatform||d.platform||d.source||""),
    checkIn:String(d.checkIn||""),
    checkOut:String(d.checkOut||""),
    guestName:String(d.guestName||""),
@@ -2212,14 +2213,24 @@ function isExactConflictRange(conflict,checkIn,checkOut){
  return !!conflict && conflict.checkIn===checkIn && conflict.checkOut===checkOut;
 }
 
+function isAirbnbIcalEditOverrideEligible(data, conflict){
+ const editId=String($("editId")?.value||"");
+ const platform=String(data?.platform||$("platform")?.value||"").trim().toLowerCase();
+ return !!(
+  editId &&
+  platform==="airbnb" &&
+  isAirbnbConflict(conflict) &&
+  String(conflict?.sourceType||"")==="publicAvailability"
+ );
+}
+
 function directOverrideValidFor(data, conflict){
  return !!(
   directOverrideState.active &&
   directOverrideState.checkIn===data.checkIn &&
   directOverrideState.checkOut===data.checkOut &&
   directOverrideState.conflictId===conflict?.id &&
-  isAirbnbConflict(conflict) &&
-  isExactConflictRange(conflict,data.checkIn,data.checkOut)
+  isAirbnbIcalEditOverrideEligible(data,conflict)
  );
 }
 
@@ -2229,11 +2240,12 @@ function showDirectOverrideOption(conflict,checkIn,checkOut){
  const active=$("directOverrideActive");
  if(!box || !txt) return;
 
- if(isAirbnbConflict(conflict) && isExactConflictRange(conflict,checkIn,checkOut)){
+ const data={checkIn,checkOut,platform:$("platform")?.value||""};
+ if(isAirbnbIcalEditOverrideEligible(data,conflict)){
   box.classList.add("show");
   txt.textContent=
-   "Tarikh ini sama tepat dengan blok Airbnb/iCal "+conflict.checkIn+" hingga "+conflict.checkOut+
-   ". iCal hanya bawa tarikh. Jika ini booking yang sama dan nama/detail anda isi sendiri, tekan Benarkan Edit & Save.";
+   "Airbnb/iCal bertindih "+conflict.checkIn+" hingga "+conflict.checkOut+
+   ". iCal hanya bawa tarikh. Jika ini booking Airbnb yang sama dan nama/detail anda isi sendiri, tekan Benarkan Edit & Save.";
   if(active){
    active.classList.toggle(
     "show",
@@ -2257,10 +2269,11 @@ $("directOverrideBtn")?.addEventListener("click",async()=>{
  if(!checkIn || !checkOut) return;
 
  try{
-  const conflict=await findBookingConflict({checkIn,checkOut},editId);
+  const data={checkIn,checkOut,platform:$("platform")?.value||""};
+  const conflict=await findBookingConflict(data,editId);
 
-  if(!conflict || !isAirbnbConflict(conflict) || !isExactConflictRange(conflict,checkIn,checkOut)){
-   alert("Override hanya dibenarkan jika konflik Airbnb/iCal sama tepat dengan tarikh booking ini.");
+  if(!conflict || !isAirbnbIcalEditOverrideEligible(data,conflict)){
+   alert("Override hanya dibenarkan semasa edit booking Airbnb sedia ada yang bertindih dengan blok Airbnb/iCal.");
    resetDirectOverride();
    await previewAvailability();
    return;
@@ -2288,7 +2301,7 @@ $("directOverrideBtn")?.addEventListener("click",async()=>{
   if($("save")) $("save").disabled=false;
 
   setAvailabilityPreview(
-   "🟠 DIRECT OVERRIDE AKTIF — Airbnb block disahkan sebagai blok untuk booking Direct. Save dibenarkan.",
+   "🟠 AIRBNB / iCal OVERRIDE AKTIF — Edit & Save dibenarkan.",
    "wait"
   );
  }catch(e){
@@ -2329,7 +2342,7 @@ async function previewAvailability(){
  setAvailabilityPreview("⏳ Semak availability Airbnb + Direct...", "wait");
 
  try{
-  const conflict = await findBookingConflict({checkIn, checkOut}, editId);
+  const conflict = await findBookingConflict({checkIn,checkOut,platform:$("platform")?.value||""},editId);
 
   if(conflict){
    if(directOverrideValidFor({checkIn,checkOut},conflict)){
@@ -8030,6 +8043,296 @@ setTimeout(()=>{
  const obs=new MutationObserver(()=>{clearTimeout(window.__v2190rt);window.__v2190rt=setTimeout(boot,120)});
  setTimeout(()=>{const p=document.getElementById('v214DashboardPanel');if(p)obs.observe(p,{childList:true,subtree:false});},2300);
  window.THE5R_CALENDAR_FEATURE_VERSION=VERSION;
+})();
+
+
+// ============================================================
+// V2.19.1 — AIRBNB BOOKING MONITOR
+// Compare current Airbnb iCal snapshot against previous successful sync.
+// Detect NEW / REMOVED blocks and show monthly booking counts.
+// IMPORTANT: iCal provides dates, not reliable guest names.
+// This module does NOT auto-cancel Admin bookings and does NOT alter SD/refund/finance.
+// ============================================================
+(function(){
+ const VERSION="V2.19.1_AIRBNB_BOOKING_MONITOR";
+ const SETTINGS_DOC="airbnbBookingMonitor";
+ const MAX_CHANGES=120;
+
+ const css=document.createElement("style");
+ css.id="v2191-airbnb-monitor-style";
+ css.textContent=`
+  #v2191AirbnbMonitor{margin:0 0 14px;background:#fff;border:1px solid #dbe3ee;border-radius:14px;padding:14px;box-shadow:0 3px 12px rgba(15,23,42,.05)}
+  .v2191-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .v2191-title{font-size:15px;font-weight:950;color:#0f3558}
+  .v2191-note{font-size:11px;color:#64748b;margin-top:3px}
+  .v2191-badge{font-size:10px;font-weight:900;border-radius:999px;padding:5px 9px;background:#eff6ff;color:#1d4ed8}
+  .v2191-months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}
+  .v2191-month{border:1px solid #e2e8f0;border-radius:11px;padding:9px;background:#f8fafc}
+  .v2191-month .m{font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase}
+  .v2191-month .n{font-size:22px;font-weight:950;color:#0f3558;margin-top:2px}
+  .v2191-month .s{font-size:10px;color:#64748b}
+  .v2191-alerts{margin-top:12px;display:grid;gap:8px}
+  .v2191-change{border:1px solid #e2e8f0;border-radius:11px;padding:10px;background:#fff}
+  .v2191-change.new{border-color:#86efac;background:#f0fdf4}
+  .v2191-change.removed{border-color:#fca5a5;background:#fff7f7}
+  .v2191-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .v2191-who{font-size:12px;font-weight:950;color:#0f172a}
+  .v2191-meta{font-size:10px;color:#64748b;margin-top:3px;line-height:1.45}
+  .v2191-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .v2191-actions button{border:0;border-radius:9px;padding:8px 10px;font-size:10px;font-weight:900;cursor:pointer}
+  .v2191-btn-blue{background:#0f3558;color:#fff}
+  .v2191-btn-gray{background:#e2e8f0;color:#334155}
+  .v2191-empty{font-size:11px;color:#64748b;padding:9px 0}
+  .v2191-summary{font-size:11px;font-weight:850;color:#334155;margin-top:9px}
+  @media(max-width:620px){.v2191-months{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ `;
+ document.head.appendChild(css);
+
+ let state={snapshot:[],changes:[],lastComparedAt:"",bootstrappedAt:""};
+ let loaded=false;
+
+ function iso(v){return String(v||"").slice(0,10);}
+ function eventKey(x){return String(x?.id||`${iso(x?.checkIn)}_${iso(x?.checkOut)}`);}
+ function cleanEvent(x){
+  return {
+   id:eventKey(x),
+   checkIn:iso(x?.checkIn),
+   checkOut:iso(x?.checkOut),
+   platform:"Airbnb"
+  };
+ }
+ function currentEvents(){
+  return (Array.isArray(v2172ExternalCalendarCache)?v2172ExternalCalendarCache:[])
+   .filter(x=>iso(x?.checkIn)&&iso(x?.checkOut))
+   .map(cleanEvent)
+   .sort((a,b)=>a.checkIn.localeCompare(b.checkIn)||a.checkOut.localeCompare(b.checkOut));
+ }
+ function monthKey(date){return iso(date).slice(0,7);}
+ function monthLabel(key){
+  const [y,m]=String(key||"").split("-").map(Number);
+  if(!y||!m)return key||"-";
+  return new Intl.DateTimeFormat("ms-MY",{month:"short",year:"numeric"}).format(new Date(y,m-1,1));
+ }
+ function nowIso(){return new Date().toISOString();}
+ function changeKey(type,e){return `${type}|${eventKey(e)}|${iso(e.checkIn)}|${iso(e.checkOut)}`;}
+
+ function diffSnapshots(prev,curr){
+  const prevMap=new Map((prev||[]).map(x=>[eventKey(x),x]));
+  const curMap=new Map((curr||[]).map(x=>[eventKey(x),x]));
+  const added=[],removed=[];
+  curMap.forEach((e,k)=>{if(!prevMap.has(k))added.push(e);});
+  prevMap.forEach((e,k)=>{if(!curMap.has(k))removed.push(e);});
+  return {added,removed};
+ }
+
+ async function loadState(){
+  if(loaded)return state;
+  try{
+   const sn=await getDoc(doc(db,"settings",SETTINGS_DOC));
+   if(sn.exists()){
+    const d=sn.data()||{};
+    state={
+     snapshot:Array.isArray(d.snapshot)?d.snapshot:[],
+     changes:Array.isArray(d.changes)?d.changes:[],
+     lastComparedAt:String(d.lastComparedAt||""),
+     bootstrappedAt:String(d.bootstrappedAt||"")
+    };
+   }
+  }catch(e){console.warn("Airbnb Monitor load",e?.message||e);}
+  loaded=true;
+  return state;
+ }
+
+ async function saveState(){
+  try{
+   await setDoc(doc(db,"settings",SETTINGS_DOC),{
+    snapshot:state.snapshot,
+    changes:state.changes.slice(0,MAX_CHANGES),
+    lastComparedAt:state.lastComparedAt||"",
+    bootstrappedAt:state.bootstrappedAt||"",
+    updatedAt:serverTimestamp()
+   },{merge:true});
+   return true;
+  }catch(e){
+   console.warn("Airbnb Monitor save",e?.message||e);
+   return false;
+  }
+ }
+
+ function mergeChanges(existing,newOnes){
+  const map=new Map((existing||[]).map(x=>[x.key,x]));
+  newOnes.forEach(x=>{if(!map.has(x.key))map.set(x.key,x);});
+  return [...map.values()]
+   .sort((a,b)=>String(b.detectedAt||"").localeCompare(String(a.detectedAt||"")))
+   .slice(0,MAX_CHANGES);
+ }
+
+ async function compareAfterSync(){
+  await loadState();
+  const curr=currentEvents();
+
+  // First successful run becomes baseline. Avoid flooding old bookings as "NEW".
+  if(!state.bootstrappedAt || !Array.isArray(state.snapshot) || !state.snapshot.length){
+   state.snapshot=curr;
+   state.bootstrappedAt=nowIso();
+   state.lastComparedAt=state.bootstrappedAt;
+   await saveState();
+   render();
+   return {baseline:true,added:[],removed:[]};
+  }
+
+  const {added,removed}=diffSnapshots(state.snapshot,curr);
+  const detectedAt=nowIso();
+  const newChanges=[
+   ...added.map(e=>({key:changeKey("NEW",e),type:"NEW",status:"OPEN",...e,detectedAt})),
+   ...removed.map(e=>({key:changeKey("REMOVED",e),type:"REMOVED",status:"OPEN",...e,detectedAt}))
+  ];
+  state.changes=mergeChanges(state.changes,newChanges);
+  state.snapshot=curr;
+  state.lastComparedAt=detectedAt;
+  await saveState();
+  render();
+  return {baseline:false,added,removed};
+ }
+
+ function monthRows(){
+  const events=currentEvents();
+  const admin=Array.isArray(bookingCache)?bookingCache:[];
+  const keys=new Set();
+  events.forEach(e=>keys.add(monthKey(e.checkIn)));
+  admin.filter(b=>String(b.platform||"").toLowerCase()==="airbnb"&&b.checkIn).forEach(b=>keys.add(monthKey(b.checkIn)));
+
+  const today=localTodayISO();
+  const nowMonth=today.slice(0,7);
+  for(let i=0;i<5;i++){
+   const [y,m]=nowMonth.split("-").map(Number);
+   const d=new Date(y,m-1+i,1);
+   keys.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
+  }
+
+  return [...keys].filter(Boolean).sort().slice(0,8).map(k=>{
+   const ical=events.filter(e=>monthKey(e.checkIn)===k).length;
+   const adminCount=admin.filter(b=>
+    String(b.platform||"").toLowerCase()==="airbnb" &&
+    monthKey(b.checkIn)===k &&
+    !["cancelled","rejected"].includes(String(b.status||"").toLowerCase())
+   ).length;
+   return {key:k,ical,admin:adminCount};
+  });
+ }
+
+ function openChanges(){
+  return (state.changes||[]).filter(x=>String(x.status||"OPEN")==="OPEN");
+ }
+
+ function escM(v){
+  return typeof esc==="function"?esc(v):String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+ }
+
+ function ensurePanel(){
+  const dash=$("v214DashboardPanel");
+  if(!dash)return null;
+  let p=$("v2191AirbnbMonitor");
+  if(!p){
+   p=document.createElement("div");
+   p.id="v2191AirbnbMonitor";
+  }
+  const wa=$("v2189WaAlerts");
+  if(wa&&wa.parentElement===dash){
+   if(wa.nextElementSibling!==p)wa.insertAdjacentElement("afterend",p);
+  }else if(dash.firstElementChild!==p){
+   dash.insertBefore(p,dash.firstChild);
+  }
+  return p;
+ }
+
+ function render(){
+  const p=ensurePanel();if(!p)return;
+  const months=monthRows(),changes=openChanges();
+  const nNew=changes.filter(x=>x.type==="NEW").length;
+  const nRemoved=changes.filter(x=>x.type==="REMOVED").length;
+
+  p.innerHTML=`
+   <div class="v2191-head">
+    <div>
+     <div class="v2191-title">🏠 Airbnb Booking Monitor</div>
+     <div class="v2191-note">Banding iCal sync lama vs terbaru. iCal bawa tarikh sahaja — nama/detail guest anda isi sendiri dalam Admin.</div>
+    </div>
+    <span class="v2191-badge">${nNew?`+${nNew} NEW`:nRemoved?`${nRemoved} REMOVED`:"NO CHANGE"}</span>
+   </div>
+   <div class="v2191-months">
+    ${months.map(x=>`<div class="v2191-month"><div class="m">${escM(monthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">Airbnb iCal booking • Admin detail ${x.admin}</div></div>`).join("")}
+   </div>
+   <div class="v2191-summary">Perubahan belum disemak: ${nNew} booking baharu • ${nRemoved} block hilang/cancel</div>
+   <div class="v2191-alerts">
+    ${changes.length?changes.slice(0,12).map(x=>`
+     <div class="v2191-change ${x.type==="NEW"?"new":"removed"}">
+      <div class="v2191-row">
+       <div>
+        <div class="v2191-who">${x.type==="NEW"?"🟢 NEW AIRBNB BOOKING":"🔴 AIRBNB BLOCK REMOVED / SEMAK CANCEL"}</div>
+        <div class="v2191-meta">${escM(x.checkIn)} → ${escM(x.checkOut)}<br>${x.type==="NEW"?"Semak nama guest di Airbnb, kemudian masukkan detail ke Admin.":"Semak Airbnb dahulu. Sistem tidak auto-cancel booking Admin."}</div>
+       </div>
+       <div class="v2191-actions">
+        <button class="v2191-btn-blue" onclick="v2191UseAirbnbDates('${escM(x.checkIn)}','${escM(x.checkOut)}','${escM(x.key)}')">${x.type==="NEW"?"GUNA TARIKH":"SEMAK TARIKH"}</button>
+        <button class="v2191-btn-gray" onclick="v2191ResolveAirbnbChange('${escM(x.key)}')">SUDAH SEMAK</button>
+       </div>
+      </div>
+     </div>`).join(""):'<div class="v2191-empty">Tiada perubahan Airbnb baharu sejak sync terakhir.</div>'}
+   </div>`;
+ }
+
+ async function resolveChange(key){
+  await loadState();
+  state.changes=(state.changes||[]).map(x=>x.key===key?{...x,status:"RESOLVED",resolvedAt:nowIso()}:x);
+  await saveState();
+  render();
+ }
+
+ function useDates(checkIn,checkOut,key){
+  const ci=$("checkIn"),co=$("checkOut"),platform=$("platform");
+  if(ci)ci.value=checkIn;
+  if(co)co.value=checkOut;
+  if(platform)platform.value="Airbnb";
+  try{platform?.dispatchEvent(new Event("change",{bubbles:true}));}catch(_){}
+  try{ci?.dispatchEvent(new Event("change",{bubbles:true}));co?.dispatchEvent(new Event("change",{bubbles:true}));}catch(_){}
+  const card=$("bookingFormCard");
+  if(card)card.scrollIntoView({behavior:"smooth",block:"start"});
+  if($("formTitle"))$("formTitle").textContent="Masukkan Detail Airbnb — "+checkIn+" → "+checkOut;
+  if($("saveStatus")){$("saveStatus").className="status";$("saveStatus").textContent="Tarikh Airbnb sudah diisi. Masukkan nama guest/detail dari Airbnb sebelum Save.";}
+ }
+
+ window.v2191ResolveAirbnbChange=resolveChange;
+ window.v2191UseAirbnbDates=useDates;
+ window.v2191CompareAirbnbSnapshot=compareAfterSync;
+ window.v2191RenderAirbnbMonitor=render;
+
+ // Wrap successful Airbnb sync. Existing sync behavior remains unchanged.
+ const baseSync=window.v2172SyncAllCalendars;
+ if(typeof baseSync==="function"){
+  window.v2172SyncAllCalendars=async function(showAlert=true){
+   const result=await baseSync(showAlert);
+   const errors=Array.isArray(result?.errors)?result.errors:[];
+   if(!errors.length){
+    try{await compareAfterSync();}catch(e){console.warn("Airbnb monitor compare",e?.message||e);}
+   }
+   return result;
+  };
+ }
+
+ const boot=async()=>{
+  try{
+   await loadState();
+   render();
+  }catch(e){console.warn(VERSION,e);}
+ };
+ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>setTimeout(boot,2400));
+ else setTimeout(boot,2400);
+
+ document.addEventListener("click",e=>{
+  if(e.target.closest?.('[data-v214-tab="dashboard"]'))setTimeout(render,300);
+ });
+
+ window.THE5R_AIRBNB_MONITOR_VERSION=VERSION;
 })();
 </script>
 </body>
