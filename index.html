@@ -2093,9 +2093,15 @@ async function findBookingConflict(data, editId=""){
  const overlaps=(aIn,aOut)=>!!aIn && !!aOut && checkIn < aOut && checkOut > aIn;
 
  // 1) Check real Admin bookings first.
+ // While editing, keep the current booking so its own Airbnb iCal block
+ // can be ignored later without weakening other conflict checks.
  const bookingSnap=await getDocs(collection(db,"bookings"));
+ let editingBooking=null;
  for(const ds of bookingSnap.docs){
-  if(editId && ds.id===editId) continue;
+  if(editId && ds.id===editId){
+   editingBooking={id:ds.id,...(ds.data()||{})};
+   continue;
+  }
   const d=ds.data()||{};
   if(d.isTrashed===true) continue;
   const status=String(d.status||"").trim().toLowerCase();
@@ -2123,6 +2129,27 @@ async function findBookingConflict(data, editId=""){
   if(ownPublicId && ds.id===ownPublicId) continue;
   const d=ds.data()||{};
   const calendarPlatform=String(d.calendarPlatform||d.platform||"").trim().toLowerCase();
+
+  // EDIT AIRBNB BOOKING FIX:
+  // The Admin booking can also exist as an Airbnb iCal block in publicAvailability.
+  // That is the SAME reservation, not a double booking.
+  // Ignore only the edited Airbnb booking's own exact original/proposed range.
+  if(
+   editId &&
+   editingBooking &&
+   String(editingBooking.platform||editingBooking.source||"").trim().toLowerCase()==="airbnb" &&
+   d.icalManaged===true &&
+   calendarPlatform==="airbnb"
+  ){
+   const blockIn=String(d.checkIn||"");
+   const blockOut=String(d.checkOut||"");
+   const originalIn=String(editingBooking.checkIn||"");
+   const originalOut=String(editingBooking.checkOut||"");
+   const sameOriginal=blockIn===originalIn && blockOut===originalOut;
+   const sameProposed=blockIn===checkIn && blockOut===checkOut;
+   if(sameOriginal || sameProposed) continue;
+  }
+
   if(d.icalManaged===true && calendarPlatform && calendarPlatform!=="airbnb") continue;
   const status=String(d.status||"").trim().toLowerCase();
   if(status && !["booked","confirmed","confirm"].includes(status)) continue;
