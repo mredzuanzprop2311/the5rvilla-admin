@@ -7599,7 +7599,277 @@ updateDashboard=function(){
 window.updateDashboard=updateDashboard;
 
 setTimeout(()=>{try{v2189RenderWaAlerts();}catch(e){console.warn("V2.18.9 alert init",e)}},1700);
+
 window.THE5R_ADMIN_VERSION="V2.18.9_ALERT_ONE_CLICK_WHATSAPP";
+
+// ============================================================
+// V2.19.2 — AIRBNB BOOKING MONITOR — FIREBASE MODULE SAFE
+// Persistent dashboard card + monthly iCal counts + NEW/REMOVED comparison.
+// iCal supplies dates only; guest name/details remain manual in Admin.
+// No auto-cancel. No changes to SD/refund/finance lifecycle.
+// ============================================================
+const V2192_MONITOR_DOC="airbnbBookingMonitor";
+const V2192_MAX_CHANGES=120;
+let v2192MonitorState={snapshot:[],changes:[],lastComparedAt:"",bootstrappedAt:""};
+let v2192MonitorLoaded=false;
+
+function v2192Iso(v){return String(v||"").slice(0,10);}
+function v2192EventKey(x){return String(x?.id||`${v2192Iso(x?.checkIn)}_${v2192Iso(x?.checkOut)}`);}
+function v2192CleanEvent(x){
+ return {id:v2192EventKey(x),checkIn:v2192Iso(x?.checkIn),checkOut:v2192Iso(x?.checkOut),platform:"Airbnb"};
+}
+function v2192CurrentEvents(){
+ return (Array.isArray(v2172ExternalCalendarCache)?v2172ExternalCalendarCache:[])
+  .filter(x=>v2192Iso(x?.checkIn)&&v2192Iso(x?.checkOut))
+  .map(v2192CleanEvent)
+  .sort((a,b)=>a.checkIn.localeCompare(b.checkIn)||a.checkOut.localeCompare(b.checkOut));
+}
+function v2192MonthKey(v){return v2192Iso(v).slice(0,7);}
+function v2192MonthLabel(key){
+ const [y,m]=String(key||"").split("-").map(Number);
+ if(!y||!m)return key||"-";
+ return new Intl.DateTimeFormat("ms-MY",{month:"short",year:"numeric"}).format(new Date(y,m-1,1));
+}
+function v2192Now(){return new Date().toISOString();}
+function v2192ChangeKey(type,e){return `${type}|${v2192EventKey(e)}|${v2192Iso(e.checkIn)}|${v2192Iso(e.checkOut)}`;}
+
+function v2192Diff(prev,curr){
+ const a=new Map((prev||[]).map(x=>[v2192EventKey(x),x]));
+ const b=new Map((curr||[]).map(x=>[v2192EventKey(x),x]));
+ const added=[],removed=[];
+ b.forEach((e,k)=>{if(!a.has(k))added.push(e);});
+ a.forEach((e,k)=>{if(!b.has(k))removed.push(e);});
+ return {added,removed};
+}
+
+async function v2192LoadState(){
+ try{
+  const sn=await getDoc(doc(db,"settings",V2192_MONITOR_DOC));
+  if(sn.exists()){
+   const d=sn.data()||{};
+   v2192MonitorState={
+    snapshot:Array.isArray(d.snapshot)?d.snapshot:[],
+    changes:Array.isArray(d.changes)?d.changes:[],
+    lastComparedAt:String(d.lastComparedAt||""),
+    bootstrappedAt:String(d.bootstrappedAt||"")
+   };
+  }
+  v2192MonitorLoaded=true;
+  return true;
+ }catch(e){
+  // Do not lock "loaded" on pre-login/permission failures. Retry after login/dashboard refresh.
+  console.warn("V2.19.2 Airbnb Monitor load",e?.message||e);
+  return false;
+ }
+}
+async function v2192SaveState(){
+ try{
+  await setDoc(doc(db,"settings",V2192_MONITOR_DOC),{
+   snapshot:v2192MonitorState.snapshot,
+   changes:(v2192MonitorState.changes||[]).slice(0,V2192_MAX_CHANGES),
+   lastComparedAt:v2192MonitorState.lastComparedAt||"",
+   bootstrappedAt:v2192MonitorState.bootstrappedAt||"",
+   updatedAt:serverTimestamp()
+  },{merge:true});
+  return true;
+ }catch(e){
+  console.warn("V2.19.2 Airbnb Monitor save",e?.message||e);
+  return false;
+ }
+}
+function v2192MergeChanges(existing,newOnes){
+ const map=new Map((existing||[]).map(x=>[x.key,x]));
+ newOnes.forEach(x=>{if(!map.has(x.key))map.set(x.key,x);});
+ return [...map.values()].sort((a,b)=>String(b.detectedAt||"").localeCompare(String(a.detectedAt||""))).slice(0,V2192_MAX_CHANGES);
+}
+async function v2192Compare(){
+ if(!v2192MonitorLoaded)await v2192LoadState();
+ const curr=v2192CurrentEvents();
+
+ // First successful monitor compare creates baseline to avoid false NEW flood.
+ if(!v2192MonitorState.bootstrappedAt){
+  v2192MonitorState.snapshot=curr;
+  v2192MonitorState.bootstrappedAt=v2192Now();
+  v2192MonitorState.lastComparedAt=v2192MonitorState.bootstrappedAt;
+  await v2192SaveState();
+  v2192RenderMonitor();
+  return {baseline:true,added:[],removed:[]};
+ }
+
+ const {added,removed}=v2192Diff(v2192MonitorState.snapshot,curr);
+ const detectedAt=v2192Now();
+ const delta=[
+  ...added.map(e=>({key:v2192ChangeKey("NEW",e),type:"NEW",status:"OPEN",...e,detectedAt})),
+  ...removed.map(e=>({key:v2192ChangeKey("REMOVED",e),type:"REMOVED",status:"OPEN",...e,detectedAt}))
+ ];
+ v2192MonitorState.changes=v2192MergeChanges(v2192MonitorState.changes,delta);
+ v2192MonitorState.snapshot=curr;
+ v2192MonitorState.lastComparedAt=detectedAt;
+ await v2192SaveState();
+ v2192RenderMonitor();
+ return {baseline:false,added,removed};
+}
+
+function v2192Monthly(){
+ const events=v2192CurrentEvents();
+ const admin=Array.isArray(bookingCache)?bookingCache:[];
+ const keys=new Set();
+ events.forEach(e=>keys.add(v2192MonthKey(e.checkIn)));
+ admin.filter(b=>String(b.platform||"").trim().toLowerCase()==="airbnb"&&b.checkIn).forEach(b=>keys.add(v2192MonthKey(b.checkIn)));
+
+ const now=localTodayISO().slice(0,7);
+ const [yy,mm]=now.split("-").map(Number);
+ for(let i=0;i<5;i++){
+  const d=new Date(yy,mm-1+i,1);
+  keys.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
+ }
+ return [...keys].filter(Boolean).sort().slice(0,8).map(k=>{
+  const ical=events.filter(e=>v2192MonthKey(e.checkIn)===k).length;
+  const adminCount=admin.filter(b=>
+   String(b.platform||"").trim().toLowerCase()==="airbnb" &&
+   v2192MonthKey(b.checkIn)===k &&
+   !["cancelled","rejected"].includes(String(b.status||"").toLowerCase())
+  ).length;
+  return {key:k,ical,admin:adminCount};
+ });
+}
+function v2192OpenChanges(){
+ return (v2192MonitorState.changes||[]).filter(x=>String(x.status||"OPEN")==="OPEN");
+}
+function v2192Esc(v){return typeof esc==="function"?esc(v):String(v??"");}
+
+function v2192EnsureStyle(){
+ if($("v2192AirbnbMonitorStyle"))return;
+ const s=document.createElement("style");
+ s.id="v2192AirbnbMonitorStyle";
+ s.textContent=`
+ #v2192AirbnbMonitor{margin:12px 0 16px;padding:15px;border:1px solid #bfdbfe;border-left:5px solid #2563eb;border-radius:16px;background:linear-gradient(135deg,#f8fbff,#eff6ff);box-shadow:0 6px 18px rgba(37,99,235,.06)}
+ .v2192-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+ .v2192-title{font-size:17px;font-weight:900;color:#173b62}.v2192-note{font-size:11px;color:#64748b;margin-top:3px;line-height:1.45}
+ .v2192-sync{border:0;border-radius:10px;padding:10px 12px;background:#1769aa;color:#fff;font-weight:900;cursor:pointer}
+ .v2192-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+ .v2192-month{padding:10px;border:1px solid #dbeafe;border-radius:12px;background:#fff}
+ .v2192-month .m{font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase}.v2192-month .n{font-size:24px;font-weight:950;color:#173b62;margin-top:3px}.v2192-month .s{font-size:10px;color:#64748b;line-height:1.35}
+ .v2192-summary{margin-top:11px;font-size:11px;font-weight:850;color:#334155}
+ .v2192-list{display:grid;gap:8px;margin-top:10px}.v2192-item{padding:10px;border-radius:11px;border:1px solid #dbeafe;background:#fff}
+ .v2192-item.new{border-color:#86efac;background:#f0fdf4}.v2192-item.removed{border-color:#fca5a5;background:#fff7f7}
+ .v2192-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}.v2192-who{font-size:12px;font-weight:950}.v2192-meta{font-size:10px;color:#64748b;margin-top:3px;line-height:1.45}
+ .v2192-actions{display:flex;gap:6px;flex-wrap:wrap}.v2192-actions button{border:0;border-radius:9px;padding:8px 10px;font-size:10px;font-weight:900;cursor:pointer}.v2192-use{background:#173b62;color:#fff}.v2192-done{background:#e2e8f0;color:#334155}
+ @media(max-width:650px){.v2192-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.v2192-sync{width:100%}}
+ `;
+ document.head.appendChild(s);
+}
+function v2192EnsurePanel(){
+ v2192EnsureStyle();
+ const dash=$("v214DashboardPanel"); if(!dash)return null;
+ let p=$("v2192AirbnbMonitor");
+ if(!p){
+  p=document.createElement("div");
+  p.id="v2192AirbnbMonitor";
+ }
+ // Always attach after WhatsApp Alert when available; otherwise at dashboard top.
+ const wa=$("v2189WaAlerts");
+ if(wa&&wa.parentElement===dash){
+  if(wa.nextElementSibling!==p)wa.insertAdjacentElement("afterend",p);
+ }else if(p.parentElement!==dash){
+  dash.insertBefore(p,dash.firstChild);
+ }
+ return p;
+}
+function v2192RenderMonitor(){
+ const p=v2192EnsurePanel(); if(!p)return;
+ const months=v2192Monthly(),changes=v2192OpenChanges();
+ const nNew=changes.filter(x=>x.type==="NEW").length;
+ const nRemoved=changes.filter(x=>x.type==="REMOVED").length;
+ const eventCount=v2192CurrentEvents().length;
+ p.innerHTML=`
+  <div class="v2192-head">
+   <div>
+    <div class="v2192-title">🏠 AIRBNB BOOKING MONITOR</div>
+    <div class="v2192-note">Jumlah iCal ikut bulan + kesan booking baru / block hilang. Nama & detail guest masih dimasukkan sendiri dari Airbnb.</div>
+   </div>
+   <button type="button" class="v2192-sync" onclick="v2192SyncAndCheck()">↻ SYNC & CHECK AIRBNB</button>
+  </div>
+  <div class="v2192-grid">
+   ${months.map(x=>`<div class="v2192-month"><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">iCal booking • Admin detail ${x.admin}</div></div>`).join("")}
+  </div>
+  <div class="v2192-summary">iCal aktif: ${eventCount} • NEW belum semak: ${nNew} • REMOVED / semak cancel: ${nRemoved}</div>
+  <div class="v2192-list">
+   ${changes.length?changes.slice(0,12).map(x=>`<div class="v2192-item ${x.type==="NEW"?"new":"removed"}"><div class="v2192-row"><div><div class="v2192-who">${x.type==="NEW"?"🟢 NEW AIRBNB BOOKING":"🔴 AIRBNB BLOCK REMOVED — SEMAK CANCEL"}</div><div class="v2192-meta">${v2192Esc(x.checkIn)} → ${v2192Esc(x.checkOut)}<br>${x.type==="NEW"?"Semak nama guest di Airbnb kemudian isi detail Admin.":"Semak Airbnb dahulu. Admin tidak auto-cancel."}</div></div><div class="v2192-actions"><button class="v2192-use" onclick="v2192UseDates('${v2192Esc(x.checkIn)}','${v2192Esc(x.checkOut)}')">${x.type==="NEW"?"GUNA TARIKH":"SEMAK TARIKH"}</button><button class="v2192-done" onclick="v2192Resolve('${v2192Esc(x.key)}')">SUDAH SEMAK</button></div></div></div>`).join(""):'<div class="v2192-note">Tiada perubahan Airbnb baharu sejak perbandingan terakhir.</div>'}
+  </div>`;
+}
+async function v2192Resolve(key){
+ if(!v2192MonitorLoaded)await v2192LoadState();
+ v2192MonitorState.changes=(v2192MonitorState.changes||[]).map(x=>x.key===key?{...x,status:"RESOLVED",resolvedAt:v2192Now()}:x);
+ await v2192SaveState(); v2192RenderMonitor();
+}
+function v2192UseDates(checkIn,checkOut){
+ const ci=$("checkIn"),co=$("checkOut"),platform=$("platform");
+ if(ci)ci.value=checkIn;if(co)co.value=checkOut;if(platform)platform.value="Airbnb";
+ platform?.dispatchEvent(new Event("change",{bubbles:true}));
+ ci?.dispatchEvent(new Event("change",{bubbles:true}));
+ co?.dispatchEvent(new Event("change",{bubbles:true}));
+ if($("formTitle"))$("formTitle").textContent=`Masukkan Detail Airbnb — ${checkIn} → ${checkOut}`;
+ if($("saveStatus")){$("saveStatus").className="status";$("saveStatus").textContent="Tarikh Airbnb sudah diisi. Semak Airbnb dan masukkan nama/detail guest sebelum Save.";}
+ $("bookingFormCard")?.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+// Hook the real lexical sync function used by the existing Sync button.
+const v2192BaseSyncAllCalendars=v2172SyncAllCalendars;
+v2172SyncAllCalendars=async function(showAlert=true){
+ const result=await v2192BaseSyncAllCalendars(showAlert);
+ const errors=Array.isArray(result?.errors)?result.errors:[];
+ if(!errors.length){
+  try{await v2192Compare();}catch(e){console.warn("V2.19.2 compare",e?.message||e);}
+ }else{
+  v2192RenderMonitor();
+ }
+ return result;
+};
+window.v2172SyncAllCalendars=v2172SyncAllCalendars;
+
+async function v2192SyncAndCheck(){
+ try{
+  const btn=document.querySelector("#v2192AirbnbMonitor .v2192-sync");
+  if(btn){btn.disabled=true;btn.textContent="SYNC...";}
+  await v2172SyncAllCalendars(true);
+ }finally{
+  const btn=document.querySelector("#v2192AirbnbMonitor .v2192-sync");
+  if(btn){btn.disabled=false;btn.textContent="↻ SYNC & CHECK AIRBNB";}
+  v2192RenderMonitor();
+ }
+}
+
+Object.assign(window,{
+ v2192RenderMonitor,
+ v2192SyncAndCheck,
+ v2192Resolve,
+ v2192UseDates,
+ v2192Compare
+});
+
+// Make the monitor persistent after every dashboard refresh.
+const v2192BaseDashboard=updateDashboard;
+updateDashboard=function(){
+ v2192BaseDashboard();
+ v2192RenderMonitor();
+ if(!v2192MonitorLoaded) v2192LoadState().then(()=>v2192RenderMonitor());
+};
+window.updateDashboard=updateDashboard;
+
+// Also restore it whenever Dashboard tab is opened.
+const v2192BaseActivateTab=v214ActivateTab;
+v214ActivateTab=function(name){
+ v2192BaseActivateTab(name);
+ if(name==="dashboard"){
+  setTimeout(()=>{v2192RenderMonitor();if(!v2192MonitorLoaded)v2192LoadState().then(()=>v2192RenderMonitor());},120);
+ }
+};
+window.v214ActivateTab=v214ActivateTab;
+
+// Immediate visual init. The card must appear even before a successful Firebase state load.
+setTimeout(()=>{try{v2192RenderMonitor();v2192LoadState().then(()=>v2192RenderMonitor());}catch(e){console.warn("V2.19.2 init",e)}},1800);
+window.THE5R_AIRBNB_MONITOR_VERSION="V2.19.2_FIREBASE_MODULE_SAFE";
 
 </script>
 
@@ -8046,294 +8316,8 @@ setTimeout(()=>{
 })();
 
 
-// ============================================================
-// V2.19.1 — AIRBNB BOOKING MONITOR
-// Compare current Airbnb iCal snapshot against previous successful sync.
-// Detect NEW / REMOVED blocks and show monthly booking counts.
-// IMPORTANT: iCal provides dates, not reliable guest names.
-// This module does NOT auto-cancel Admin bookings and does NOT alter SD/refund/finance.
-// ============================================================
-(function(){
- const VERSION="V2.19.1_AIRBNB_BOOKING_MONITOR";
- const SETTINGS_DOC="airbnbBookingMonitor";
- const MAX_CHANGES=120;
 
- const css=document.createElement("style");
- css.id="v2191-airbnb-monitor-style";
- css.textContent=`
-  #v2191AirbnbMonitor{margin:0 0 14px;background:#fff;border:1px solid #dbe3ee;border-radius:14px;padding:14px;box-shadow:0 3px 12px rgba(15,23,42,.05)}
-  .v2191-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
-  .v2191-title{font-size:15px;font-weight:950;color:#0f3558}
-  .v2191-note{font-size:11px;color:#64748b;margin-top:3px}
-  .v2191-badge{font-size:10px;font-weight:900;border-radius:999px;padding:5px 9px;background:#eff6ff;color:#1d4ed8}
-  .v2191-months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px}
-  .v2191-month{border:1px solid #e2e8f0;border-radius:11px;padding:9px;background:#f8fafc}
-  .v2191-month .m{font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase}
-  .v2191-month .n{font-size:22px;font-weight:950;color:#0f3558;margin-top:2px}
-  .v2191-month .s{font-size:10px;color:#64748b}
-  .v2191-alerts{margin-top:12px;display:grid;gap:8px}
-  .v2191-change{border:1px solid #e2e8f0;border-radius:11px;padding:10px;background:#fff}
-  .v2191-change.new{border-color:#86efac;background:#f0fdf4}
-  .v2191-change.removed{border-color:#fca5a5;background:#fff7f7}
-  .v2191-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
-  .v2191-who{font-size:12px;font-weight:950;color:#0f172a}
-  .v2191-meta{font-size:10px;color:#64748b;margin-top:3px;line-height:1.45}
-  .v2191-actions{display:flex;gap:6px;flex-wrap:wrap}
-  .v2191-actions button{border:0;border-radius:9px;padding:8px 10px;font-size:10px;font-weight:900;cursor:pointer}
-  .v2191-btn-blue{background:#0f3558;color:#fff}
-  .v2191-btn-gray{background:#e2e8f0;color:#334155}
-  .v2191-empty{font-size:11px;color:#64748b;padding:9px 0}
-  .v2191-summary{font-size:11px;font-weight:850;color:#334155;margin-top:9px}
-  @media(max-width:620px){.v2191-months{grid-template-columns:repeat(2,minmax(0,1fr))}}
- `;
- document.head.appendChild(css);
 
- let state={snapshot:[],changes:[],lastComparedAt:"",bootstrappedAt:""};
- let loaded=false;
-
- function iso(v){return String(v||"").slice(0,10);}
- function eventKey(x){return String(x?.id||`${iso(x?.checkIn)}_${iso(x?.checkOut)}`);}
- function cleanEvent(x){
-  return {
-   id:eventKey(x),
-   checkIn:iso(x?.checkIn),
-   checkOut:iso(x?.checkOut),
-   platform:"Airbnb"
-  };
- }
- function currentEvents(){
-  return (Array.isArray(v2172ExternalCalendarCache)?v2172ExternalCalendarCache:[])
-   .filter(x=>iso(x?.checkIn)&&iso(x?.checkOut))
-   .map(cleanEvent)
-   .sort((a,b)=>a.checkIn.localeCompare(b.checkIn)||a.checkOut.localeCompare(b.checkOut));
- }
- function monthKey(date){return iso(date).slice(0,7);}
- function monthLabel(key){
-  const [y,m]=String(key||"").split("-").map(Number);
-  if(!y||!m)return key||"-";
-  return new Intl.DateTimeFormat("ms-MY",{month:"short",year:"numeric"}).format(new Date(y,m-1,1));
- }
- function nowIso(){return new Date().toISOString();}
- function changeKey(type,e){return `${type}|${eventKey(e)}|${iso(e.checkIn)}|${iso(e.checkOut)}`;}
-
- function diffSnapshots(prev,curr){
-  const prevMap=new Map((prev||[]).map(x=>[eventKey(x),x]));
-  const curMap=new Map((curr||[]).map(x=>[eventKey(x),x]));
-  const added=[],removed=[];
-  curMap.forEach((e,k)=>{if(!prevMap.has(k))added.push(e);});
-  prevMap.forEach((e,k)=>{if(!curMap.has(k))removed.push(e);});
-  return {added,removed};
- }
-
- async function loadState(){
-  if(loaded)return state;
-  try{
-   const sn=await getDoc(doc(db,"settings",SETTINGS_DOC));
-   if(sn.exists()){
-    const d=sn.data()||{};
-    state={
-     snapshot:Array.isArray(d.snapshot)?d.snapshot:[],
-     changes:Array.isArray(d.changes)?d.changes:[],
-     lastComparedAt:String(d.lastComparedAt||""),
-     bootstrappedAt:String(d.bootstrappedAt||"")
-    };
-   }
-  }catch(e){console.warn("Airbnb Monitor load",e?.message||e);}
-  loaded=true;
-  return state;
- }
-
- async function saveState(){
-  try{
-   await setDoc(doc(db,"settings",SETTINGS_DOC),{
-    snapshot:state.snapshot,
-    changes:state.changes.slice(0,MAX_CHANGES),
-    lastComparedAt:state.lastComparedAt||"",
-    bootstrappedAt:state.bootstrappedAt||"",
-    updatedAt:serverTimestamp()
-   },{merge:true});
-   return true;
-  }catch(e){
-   console.warn("Airbnb Monitor save",e?.message||e);
-   return false;
-  }
- }
-
- function mergeChanges(existing,newOnes){
-  const map=new Map((existing||[]).map(x=>[x.key,x]));
-  newOnes.forEach(x=>{if(!map.has(x.key))map.set(x.key,x);});
-  return [...map.values()]
-   .sort((a,b)=>String(b.detectedAt||"").localeCompare(String(a.detectedAt||"")))
-   .slice(0,MAX_CHANGES);
- }
-
- async function compareAfterSync(){
-  await loadState();
-  const curr=currentEvents();
-
-  // First successful run becomes baseline. Avoid flooding old bookings as "NEW".
-  if(!state.bootstrappedAt || !Array.isArray(state.snapshot) || !state.snapshot.length){
-   state.snapshot=curr;
-   state.bootstrappedAt=nowIso();
-   state.lastComparedAt=state.bootstrappedAt;
-   await saveState();
-   render();
-   return {baseline:true,added:[],removed:[]};
-  }
-
-  const {added,removed}=diffSnapshots(state.snapshot,curr);
-  const detectedAt=nowIso();
-  const newChanges=[
-   ...added.map(e=>({key:changeKey("NEW",e),type:"NEW",status:"OPEN",...e,detectedAt})),
-   ...removed.map(e=>({key:changeKey("REMOVED",e),type:"REMOVED",status:"OPEN",...e,detectedAt}))
-  ];
-  state.changes=mergeChanges(state.changes,newChanges);
-  state.snapshot=curr;
-  state.lastComparedAt=detectedAt;
-  await saveState();
-  render();
-  return {baseline:false,added,removed};
- }
-
- function monthRows(){
-  const events=currentEvents();
-  const admin=Array.isArray(bookingCache)?bookingCache:[];
-  const keys=new Set();
-  events.forEach(e=>keys.add(monthKey(e.checkIn)));
-  admin.filter(b=>String(b.platform||"").toLowerCase()==="airbnb"&&b.checkIn).forEach(b=>keys.add(monthKey(b.checkIn)));
-
-  const today=localTodayISO();
-  const nowMonth=today.slice(0,7);
-  for(let i=0;i<5;i++){
-   const [y,m]=nowMonth.split("-").map(Number);
-   const d=new Date(y,m-1+i,1);
-   keys.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
-  }
-
-  return [...keys].filter(Boolean).sort().slice(0,8).map(k=>{
-   const ical=events.filter(e=>monthKey(e.checkIn)===k).length;
-   const adminCount=admin.filter(b=>
-    String(b.platform||"").toLowerCase()==="airbnb" &&
-    monthKey(b.checkIn)===k &&
-    !["cancelled","rejected"].includes(String(b.status||"").toLowerCase())
-   ).length;
-   return {key:k,ical,admin:adminCount};
-  });
- }
-
- function openChanges(){
-  return (state.changes||[]).filter(x=>String(x.status||"OPEN")==="OPEN");
- }
-
- function escM(v){
-  return typeof esc==="function"?esc(v):String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
- }
-
- function ensurePanel(){
-  const dash=$("v214DashboardPanel");
-  if(!dash)return null;
-  let p=$("v2191AirbnbMonitor");
-  if(!p){
-   p=document.createElement("div");
-   p.id="v2191AirbnbMonitor";
-  }
-  const wa=$("v2189WaAlerts");
-  if(wa&&wa.parentElement===dash){
-   if(wa.nextElementSibling!==p)wa.insertAdjacentElement("afterend",p);
-  }else if(dash.firstElementChild!==p){
-   dash.insertBefore(p,dash.firstChild);
-  }
-  return p;
- }
-
- function render(){
-  const p=ensurePanel();if(!p)return;
-  const months=monthRows(),changes=openChanges();
-  const nNew=changes.filter(x=>x.type==="NEW").length;
-  const nRemoved=changes.filter(x=>x.type==="REMOVED").length;
-
-  p.innerHTML=`
-   <div class="v2191-head">
-    <div>
-     <div class="v2191-title">🏠 Airbnb Booking Monitor</div>
-     <div class="v2191-note">Banding iCal sync lama vs terbaru. iCal bawa tarikh sahaja — nama/detail guest anda isi sendiri dalam Admin.</div>
-    </div>
-    <span class="v2191-badge">${nNew?`+${nNew} NEW`:nRemoved?`${nRemoved} REMOVED`:"NO CHANGE"}</span>
-   </div>
-   <div class="v2191-months">
-    ${months.map(x=>`<div class="v2191-month"><div class="m">${escM(monthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">Airbnb iCal booking • Admin detail ${x.admin}</div></div>`).join("")}
-   </div>
-   <div class="v2191-summary">Perubahan belum disemak: ${nNew} booking baharu • ${nRemoved} block hilang/cancel</div>
-   <div class="v2191-alerts">
-    ${changes.length?changes.slice(0,12).map(x=>`
-     <div class="v2191-change ${x.type==="NEW"?"new":"removed"}">
-      <div class="v2191-row">
-       <div>
-        <div class="v2191-who">${x.type==="NEW"?"🟢 NEW AIRBNB BOOKING":"🔴 AIRBNB BLOCK REMOVED / SEMAK CANCEL"}</div>
-        <div class="v2191-meta">${escM(x.checkIn)} → ${escM(x.checkOut)}<br>${x.type==="NEW"?"Semak nama guest di Airbnb, kemudian masukkan detail ke Admin.":"Semak Airbnb dahulu. Sistem tidak auto-cancel booking Admin."}</div>
-       </div>
-       <div class="v2191-actions">
-        <button class="v2191-btn-blue" onclick="v2191UseAirbnbDates('${escM(x.checkIn)}','${escM(x.checkOut)}','${escM(x.key)}')">${x.type==="NEW"?"GUNA TARIKH":"SEMAK TARIKH"}</button>
-        <button class="v2191-btn-gray" onclick="v2191ResolveAirbnbChange('${escM(x.key)}')">SUDAH SEMAK</button>
-       </div>
-      </div>
-     </div>`).join(""):'<div class="v2191-empty">Tiada perubahan Airbnb baharu sejak sync terakhir.</div>'}
-   </div>`;
- }
-
- async function resolveChange(key){
-  await loadState();
-  state.changes=(state.changes||[]).map(x=>x.key===key?{...x,status:"RESOLVED",resolvedAt:nowIso()}:x);
-  await saveState();
-  render();
- }
-
- function useDates(checkIn,checkOut,key){
-  const ci=$("checkIn"),co=$("checkOut"),platform=$("platform");
-  if(ci)ci.value=checkIn;
-  if(co)co.value=checkOut;
-  if(platform)platform.value="Airbnb";
-  try{platform?.dispatchEvent(new Event("change",{bubbles:true}));}catch(_){}
-  try{ci?.dispatchEvent(new Event("change",{bubbles:true}));co?.dispatchEvent(new Event("change",{bubbles:true}));}catch(_){}
-  const card=$("bookingFormCard");
-  if(card)card.scrollIntoView({behavior:"smooth",block:"start"});
-  if($("formTitle"))$("formTitle").textContent="Masukkan Detail Airbnb — "+checkIn+" → "+checkOut;
-  if($("saveStatus")){$("saveStatus").className="status";$("saveStatus").textContent="Tarikh Airbnb sudah diisi. Masukkan nama guest/detail dari Airbnb sebelum Save.";}
- }
-
- window.v2191ResolveAirbnbChange=resolveChange;
- window.v2191UseAirbnbDates=useDates;
- window.v2191CompareAirbnbSnapshot=compareAfterSync;
- window.v2191RenderAirbnbMonitor=render;
-
- // Wrap successful Airbnb sync. Existing sync behavior remains unchanged.
- const baseSync=window.v2172SyncAllCalendars;
- if(typeof baseSync==="function"){
-  window.v2172SyncAllCalendars=async function(showAlert=true){
-   const result=await baseSync(showAlert);
-   const errors=Array.isArray(result?.errors)?result.errors:[];
-   if(!errors.length){
-    try{await compareAfterSync();}catch(e){console.warn("Airbnb monitor compare",e?.message||e);}
-   }
-   return result;
-  };
- }
-
- const boot=async()=>{
-  try{
-   await loadState();
-   render();
-  }catch(e){console.warn(VERSION,e);}
- };
- if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>setTimeout(boot,2400));
- else setTimeout(boot,2400);
-
- document.addEventListener("click",e=>{
-  if(e.target.closest?.('[data-v214-tab="dashboard"]'))setTimeout(render,300);
- });
-
- window.THE5R_AIRBNB_MONITOR_VERSION=VERSION;
-})();
 </script>
 </body>
 </html>
