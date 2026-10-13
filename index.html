@@ -1113,14 +1113,14 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
   <div id="availabilityPreview"></div>
 
   <div id="directOverrideBox">
-   <div><b>Direct Override</b></div>
+   <div><b>Airbnb / iCal Override</b></div>
    <div id="directOverrideText" class="note">
-    Gunakan hanya jika tarikh Airbnb ini memang anda tutup sendiri untuk pelanggan Direct.
+    Gunakan bila iCal Airbnb hanya memberi tarikh tetapi nama/detail booking anda masukkan sendiri.
    </div>
    <button id="directOverrideBtn" type="button">
-    INI BLOK AIRBNB UNTUK DIRECT — BENARKAN SAVE
+    INI BOOKING YANG SAMA — BENARKAN EDIT & SAVE
    </button>
-   <div id="directOverrideActive">✅ DIRECT OVERRIDE AKTIF untuk tarikh ini.</div>
+   <div id="directOverrideActive">✅ AIRBNB / iCal OVERRIDE AKTIF — Edit & Save dibenarkan.</div>
   </div>
 
   <div id="v2169DataWarning" class="v2169-warning ok">✅ Data asas booking lengkap.</div>
@@ -2030,13 +2030,13 @@ $("save").onclick=async()=>{
     data.directOverrideConflictId=conflict.id;
     data.directOverrideCheckIn=conflict.checkIn;
     data.directOverrideCheckOut=conflict.checkOut;
-    data.directOverrideNote="Admin confirmed Airbnb block belongs to this Direct booking.";
+    data.directOverrideNote="Admin confirmed exact Airbnb/iCal block belongs to this same booking; guest name/details maintained manually in Admin.";
    }else{
     $("saveStatus").className="status err";
     $("saveStatus").textContent =
      "⛔ TARIKH SUDAH BOOKED ("+conflict.platform+"): "+
      conflict.checkIn+" hingga "+conflict.checkOut+
-     ". Booking Direct tidak disimpan.";
+     ". Booking tidak disimpan.";
     return;
    }
   }
@@ -2148,12 +2148,11 @@ async function findBookingConflict(data, editId=""){
    const sameOriginal=!!editingBooking && blockIn===originalIn && blockOut===originalOut;
    const sameProposed=blockIn===checkIn && blockOut===checkOut;
 
-   // Existing Airbnb booking may be represented twice:
-   // 1) Admin booking record
-   // 2) Airbnb iCal publicAvailability block.
-   // While editing an Airbnb booking, the exact iCal block for the proposed
-   // dates is the same reservation, so it must not disable Update Booking.
-   if(editingPlatform==="airbnb" && (sameOriginal || sameProposed)) continue;
+   // Do not silently bypass the iCal block.
+   // Return the exact Airbnb conflict so the explicit Override button can
+   // let Admin confirm that this is the SAME booking before Save.
+   // Other overlaps remain blocked as before.
+   if(editingPlatform==="airbnb" && sameOriginal && !sameProposed) continue;
   }
 
   if(d.icalManaged===true && calendarPlatform && calendarPlatform!=="airbnb") continue;
@@ -2201,8 +2200,12 @@ function resetDirectOverride(){
 }
 
 function isAirbnbConflict(conflict){
- const value=String(conflict?.source || conflict?.platform || "").trim().toLowerCase();
- return value==="airbnb";
+ const values=[
+  conflict?.source,
+  conflict?.platform,
+  conflict?.calendarPlatform
+ ].map(v=>String(v||"").trim().toLowerCase());
+ return values.some(v=>v==="airbnb" || v.includes("airbnb"));
 }
 
 function isExactConflictRange(conflict,checkIn,checkOut){
@@ -2229,8 +2232,8 @@ function showDirectOverrideOption(conflict,checkIn,checkOut){
  if(isAirbnbConflict(conflict) && isExactConflictRange(conflict,checkIn,checkOut)){
   box.classList.add("show");
   txt.textContent=
-   "Tarikh ini sama tepat dengan blok Airbnb "+conflict.checkIn+" hingga "+conflict.checkOut+
-   ". Jika anda sendiri tutup Airbnb untuk pelanggan Direct, tekan Direct Override.";
+   "Tarikh ini sama tepat dengan blok Airbnb/iCal "+conflict.checkIn+" hingga "+conflict.checkOut+
+   ". iCal hanya bawa tarikh. Jika ini booking yang sama dan nama/detail anda isi sendiri, tekan Benarkan Edit & Save.";
   if(active){
    active.classList.toggle(
     "show",
@@ -2257,17 +2260,17 @@ $("directOverrideBtn")?.addEventListener("click",async()=>{
   const conflict=await findBookingConflict({checkIn,checkOut},editId);
 
   if(!conflict || !isAirbnbConflict(conflict) || !isExactConflictRange(conflict,checkIn,checkOut)){
-   alert("Direct Override hanya dibenarkan jika konflik Airbnb sama tepat dengan tarikh Direct.");
+   alert("Override hanya dibenarkan jika konflik Airbnb/iCal sama tepat dengan tarikh booking ini.");
    resetDirectOverride();
    await previewAvailability();
    return;
   }
 
   const ok=confirm(
-   "SAHKAN DIRECT OVERRIDE\n\n"+
+   "SAHKAN AIRBNB / iCal OVERRIDE\n\n"+
    "Tarikh: "+checkIn+" hingga "+checkOut+"\n"+
    "Airbnb: BOOKED\n\n"+
-   "Tekan OK hanya jika blok Airbnb ini anda sendiri buat untuk pelanggan Direct, BUKAN tempahan Airbnb sebenar."
+   "Tekan OK hanya jika blok iCal ini ialah booking yang sama dan nama/detail anda masukkan sendiri dalam Admin."
   );
 
   if(!ok) return;
@@ -2331,9 +2334,9 @@ async function previewAvailability(){
   if(conflict){
    if(directOverrideValidFor({checkIn,checkOut},conflict)){
     setAvailabilityPreview(
-     "🟠 DIRECT OVERRIDE AKTIF — Airbnb • " +
+     "🟠 AIRBNB / iCal OVERRIDE AKTIF • " +
      conflict.checkIn + " hingga " + conflict.checkOut +
-     ". Save Direct dibenarkan.",
+     ". Edit & Save dibenarkan.",
      "wait"
     );
     showDirectOverrideOption(conflict,checkIn,checkOut);
