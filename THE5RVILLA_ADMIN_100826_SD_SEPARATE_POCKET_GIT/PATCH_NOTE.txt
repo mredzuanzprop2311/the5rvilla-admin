@@ -1,0 +1,26 @@
+V2.22.2 — SECURITY DEPOSIT SEPARATE POCKET
+
+Main Laporan Bayaran now focuses only on:
+- Rental
+- Platform Net Pay
+- 5R SOLUTION • MAYBANK
+
+Security Deposit is moved into a separate collapsible pocket:
+- SD Masuk
+- SD Refund
+- SD Held
+- Deposit-account transaction detail
+
+Main SAVE PDF report excludes Security Deposit.
+SD stays available only when admin opens the Security Deposit Pocket.
+
+Preserved:
+- Platform Net Pay required
+- Platform Net Pay existing values in report
+- Direct RM1500 + SD RM300 allocation
+- SD300 return/refund guard
+- Booking/refund/calendar/tally/invoice
+
+Tests:
+- JavaScript syntax PASS
+- SD pocket/static checks PASS
