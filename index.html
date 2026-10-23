@@ -1016,6 +1016,60 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
 @media(max-width:650px){#v5rReceiptModal{padding:5px}#v5rReceiptPaper{transform-origin:top left}.v5r-r-head{grid-template-columns:90px 1fr}.v5r-r-title{grid-column:1/-1;text-align:left}.v5r-r-meta-row{grid-template-columns:82px minmax(0,1fr)}.v5r-r-box{grid-template-columns:1fr}}
 </style>
 
+<style id="v223-receipt-layout-fix">
+/* V2.23.0 — Receipt / Invoice responsive A4 layout fix */
+#v5rReceiptModal .shell{width:min(860px,100%);overflow:hidden}
+#v5rReceiptPaper{
+ width:100%;max-width:794px;min-height:auto;
+ padding:28px 30px;overflow:hidden;
+}
+#v5rReceiptPaper *{box-sizing:border-box;min-width:0}
+.v5r-r-head{grid-template-columns:105px minmax(0,1fr) 215px;gap:14px}
+.v5r-r-logo{width:96px;height:96px}
+.v5r-r-title{min-width:0}.v5r-r-title h2{font-size:22px;overflow-wrap:anywhere}
+.v5r-r-meta-row{grid-template-columns:78px minmax(0,1fr);font-size:11px}
+.v5r-r-box{grid-template-columns:minmax(0,1fr) 205px;gap:14px}
+.v5r-r-card{min-width:0}.v5r-r-row{grid-template-columns:105px 10px minmax(0,1fr);font-size:11px}
+.v5r-r-row span:last-child{overflow-wrap:anywhere;word-break:normal}
+.v5r-r-amount{padding:15px 10px;overflow:hidden}
+.v5r-r-amount .value{font-size:23px;line-height:1.15;white-space:nowrap;letter-spacing:-.02em}
+.v5r-r-table,.v5r-inv-summary,.v5r-r-total{table-layout:fixed}
+.v5r-r-table th:last-child,.v5r-r-table td:last-child{width:170px;white-space:nowrap;text-align:right}
+.v5r-r-table td{overflow-wrap:anywhere;word-break:normal}
+.v5r-r-total{width:min(320px,100%)}
+.v5r-r-total td:last-child,.v5r-inv-summary td:last-child{width:170px;white-space:nowrap;text-align:right}
+
+/* Any financial split table inside receipt: keep label/value clean */
+#v5rReceiptPaper table td:last-child,#v5rReceiptPaper table th:last-child{
+ overflow:hidden;text-overflow:clip;
+}
+
+@media(max-width:760px){
+ #v5rReceiptModal{padding:4px}
+ #v5rReceiptModal .shell{padding:6px;border-radius:10px}
+ #v5rReceiptPaper{padding:18px 16px;max-width:100%}
+ .v5r-r-head{grid-template-columns:76px minmax(0,1fr);gap:10px}
+ .v5r-r-logo{width:70px;height:70px}
+ .v5r-r-company{font-size:10px}
+ .v5r-r-title{grid-column:1/-1;text-align:left}
+ .v5r-r-meta-row{grid-template-columns:76px minmax(0,1fr)}
+ .v5r-r-box{grid-template-columns:1fr}
+ .v5r-r-amount{width:100%;padding:12px}
+ .v5r-r-amount .value{font-size:22px}
+ .v5r-r-row{grid-template-columns:92px 8px minmax(0,1fr)}
+ .v5r-r-table{font-size:10px}
+ .v5r-r-table th,.v5r-r-table td{padding:7px 6px}
+ .v5r-r-table th:last-child,.v5r-r-table td:last-child{width:118px}
+ .v5r-r-total,.v5r-inv-summary{width:100%}
+ .v5r-r-total td:last-child,.v5r-inv-summary td:last-child{width:118px}
+}
+
+@media print{
+ #v5rReceiptPaper{width:794px!important;max-width:794px!important;padding:28px 30px!important;overflow:visible!important}
+ .v5r-r-head{grid-template-columns:105px minmax(0,1fr) 215px!important}
+ .v5r-r-box{grid-template-columns:minmax(0,1fr) 205px!important}
+}
+</style>
 
 <style id="v222-payment-report-style">
 .v222-report{margin-top:18px;border:1px solid #dbe7f2;border-radius:16px;padding:16px;background:#fff}
@@ -1758,7 +1812,6 @@ function txIsRefund(type){ return type==="Refund"; }
 function createTransactionRow(data={}){
  const row=document.createElement("div");
  row.className="tx-row";
- row.v223OriginalTx=structuredClone(data);
  row.innerHTML=`
   <div><label>Jenis</label><select class="tx-type">${TX_TYPES.map(t=>`<option value="${t}" ${data.type===t?"selected":""}>${txTypeLabel(t)}</option>`).join("")}</select></div>
   <div><label>Tarikh</label><input class="tx-date" type="date" value="${data.date||""}"></div>
@@ -1775,7 +1828,6 @@ function createTransactionRow(data={}){
 
 function getTransactions(){
  return [...document.querySelectorAll("#transactionRows .tx-row")].map(row=>({
-  ...(row.v223OriginalTx||{}),
   type:row.querySelector(".tx-type").value,
   date:row.querySelector(".tx-date").value,
   amount:Number(row.querySelector(".tx-amount").value||0),
@@ -2164,7 +2216,6 @@ $("save").onclick=async()=>{
   if(editId){
    await updateDoc(doc(db,"bookings",editId),{
     ...data,
-    __v223EditBase:v223EditBase?.id===editId?v223EditBase:null,
     updatedAt:serverTimestamp()
    });
    $("saveStatus").className="status ok";
@@ -3919,12 +3970,10 @@ Jika ada pertanyaan, boleh balas WhatsApp ini. Terima kasih.`;
 }
 window.sendGuestBookingUpdate=sendGuestBookingUpdate;
 
-let v223EditBase=null;
 function editBooking(i){
  if(window.v214ActivateTab) window.v214ActivateTab("upcoming");
  document.getElementById("bookingFormCard")?.classList.remove("v214-form-hidden");
  const d=bookingCache[i];
- v223EditBase={id:d.id,transactions:structuredClone(d.transactions||[])};
  $("editId").value=d.id;
  $("guestName").value=d.guestName||d.guest||"";
  $("phone").value=d.phone||"";
@@ -6726,7 +6775,7 @@ function v218CheckBookingWrite(ref,before,next){
   // Any append-only financial transaction (Payment / SD / Refund / charges)
   // is merged against the fresh Firestore snapshot. Editing/removing an existing
   // transaction still keeps the stale-cache conflict protection.
-  if(before&&info.cached&&!v223SameTx(info.cachedTx,oldTx)&&!info.appendOnly){
+  if(before&&info.cached&&JSON.stringify(info.cachedTx)!==JSON.stringify(oldTx)&&!info.appendOnly){
    throw Error('Booking berubah pada sesi lain. Refresh sebelum ubah bayaran.');
   }
 
@@ -6748,24 +6797,6 @@ function v218CheckBookingWrite(ref,before,next){
   }
  }
 }
-function v223Stable(value){
- if(Array.isArray(value))return value.map(v223Stable);
- if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,v223Stable(value[k])]));
- return value;
-}
-function v223SameTx(a,b){return JSON.stringify(v223Stable(a||[]))===JSON.stringify(v223Stable(b||[]));}
-function v223PrepareEdit(data,before,base){
- const out={...data};delete out.__v223EditBase;
- if(!base)return out;
- const baseline=base.transactions||[],server=before?.transactions||[],proposed=out.transactions||[];
- if(v223SameTx(proposed,baseline))out.transactions=server;
- else if(!v223SameTx(server,baseline))throw Error('Bayaran booking telah berubah selepas borang dibuka. Salin perubahan anda, Batal Edit, kemudian buka Edit semula untuk melihat bayaran terkini.');
- if(typeof paymentMathFromBooking==='function'){
-  const m=paymentMathFromBooking({...before,...out},out.transactions);
-  Object.assign(out,{grossDue:m.due,totalIncoming:m.incoming,totalRefund:m.refunds,netPaid:m.netPaid,balance:m.balance,paymentStatus:m.status,securityDepositReceived:m.securityDepositReceived,securityDepositRefunded:m.securityDepositRefunded,securityDepositBalance:m.securityDepositBalance});
- }
- return out;
-}
 async function v218Atomic(ref,data,mode,options){
  const actor=v218Actor(),auditRef=doc(collection(db,'financialAudit'));
  return runTransaction(db,async t=>{
@@ -6773,9 +6804,6 @@ async function v218Atomic(ref,data,mode,options){
   if(mode==='update'&&!before)throw Error('Rekod tidak ditemui.');
   if(mode==='create'&&before)throw Error('Rekod telah wujud.');
 
-  const editBase=data?.__v223EditBase;
-  if(editBase&&editBase.id!==ref.id)throw Error("Borang edit tidak sepadan dengan booking.");
-  data=v223PrepareEdit(data,before,editBase);
   let writeData=data;
 
   // APPEND-ONLY FINANCIAL WRITE:
@@ -9448,21 +9476,6 @@ function v5rReceiptNo(prefix,bookingNo,receiptNo){
  const base=receiptNo || String(bookingNo||"5RV").replace("5RV-BKG-","5RV-RCP-") || "5RV-RCP";
  return `${base}-${prefix}`;
 }
-function v224Settlement(d){
- const tx=Array.isArray(d?.transactions)?d.transactions:[];
- const m=v2213AuthoritativeDirectAllocation(d,tx),r=v217RefundInfo(d);
- const direct=String(d?.platform||'Direct').toLowerCase()==='direct';
- const rentalDue=Math.max(0,Number(m.rentalOtherDue||0));
- const incoming=Math.max(0,Number(m.incoming||0));
- const sdReceived=Math.max(0,Number(r.paid||0)),sdRefunded=Math.max(0,Number(r.refunded||0));
- const rentalReceived=direct?Math.max(0,incoming-sdReceived):Math.max(0,Number(m.rentalOtherPaid||0));
- return {direct,rent:direct?Math.max(0,Number(d.rent||0)):0,rentalDue,rentalReceived,rentalBalance:Math.max(0,rentalDue-rentalReceived),incoming,sdRequired:Math.max(0,Number(r.dep||0)),sdReceived,sdRefunded,sdHeld:Math.max(0,sdReceived-sdRefunded),sdOutstanding:Math.max(0,Number(r.dep||0)-sdReceived),netRetained:Math.max(0,incoming-sdRefunded)};
-}
-function v224Summary(x){
- const a=x.settlement;if(!a)return '';
- const row=(label,value)=>`<tr><td>${label}</td><td>RM ${v5rMoney(value)}</td></tr>`;
- return `<table class="v5r-r-total" style="page-break-inside:avoid"><tr><td colspan="2"><b>PECAHAN SEWA DAN SECURITY DEPOSIT (SD)</b></td></tr>${row('Harga sewa villa',a.rent)}${row('Jumlah sewa dan caj penginapan',a.rentalDue)}${row('Bayaran sewa / caj diterima',a.rentalReceived)}${row('Baki sewa / caj belum dibayar',a.rentalBalance)}${row('SD ditetapkan',a.sdRequired)}${row('SD telah diterima',a.sdReceived)}${row('SD telah dipulangkan',a.sdRefunded)}${row('Baki SD masih dipegang',a.sdHeld)}${row('SD belum diterima',a.sdOutstanding)}${row('Jumlah wang masuk asal (termasuk SD)',a.incoming)}${row('Tolak: SD dipulangkan',a.sdRefunded)}${row('<b>Wang bersih selepas pulangan SD</b>',a.netRetained)}</table><p style="font-size:11px">${a.sdRefunded>0?'SD dipulangkan mengikut rekod bayaran. Pulangan SD bukan baki sewa tertunggak.':'SD ditunjukkan berasingan daripada bayaran sewa.'}${!a.direct?' Sewa melalui platform tidak diakui sebagai bayaran tetamu dalam rekod SD ini.':''}</p>`;
-}
 function v5rReceiptHtml(x){
  const receiptNo=String(x.receiptNo||"").trim() || "DRAFT";
  const receiptDate=String(x.date||"").trim() || localTodayISO();
@@ -9498,7 +9511,11 @@ function v5rReceiptHtml(x){
   <table class="v5r-r-table"><thead><tr><th>Description</th><th>Amount (RM)</th></tr></thead>
    <tbody>${x.items.map(it=>`<tr><td><b>${esc(it.label)}</b>${it.sub?`<br><span style="font-size:10px;color:#64748b">${esc(it.sub)}</span>`:""}</td><td><b>RM ${v5rMoney(it.amount)}</b></td></tr>`).join("")}</tbody>
   </table>
-  ${x.settlement?v224Summary(x):`<table class="v5r-r-total"><tr><td>Jumlah bayaran diterima</td><td>RM ${v5rMoney(x.amount)}</td></tr>${x.balance!=null?`<tr><td>Baki belum dibayar</td><td>RM ${v5rMoney(x.balance)}</td></tr>`:''}</table>`}
+  <table class="v5r-r-total">
+   <tr><td>Subtotal</td><td>RM ${v5rMoney(x.subtotal!=null?x.subtotal:x.amount)}</td></tr>
+   <tr><td>Total Received</td><td>RM ${v5rMoney(x.amount)}</td></tr>
+   ${x.balance!=null?`<tr><td>Balance Due</td><td>RM ${v5rMoney(x.balance)}</td></tr>`:""}
+  </table>
   <div class="v5r-r-terms">
    <h3>📄 TERMS & CONDITIONS</h3>
    <ul>
@@ -9544,14 +9561,26 @@ function v5rOpenTandaReceiptFromBooking(i){
   note:"Bayaran tanda jadi diterima. Resit ini dijana daripada transaksi booking sedia ada."
  });
 }
-function v224OpenSettlementReceipt(i,full){
- const d=bookingCache[i];if(!d)return;
- const a=v224Settlement(d);
- if(full&&(a.rentalBalance>0||a.sdOutstanding>0)){alert('Bayaran penuh belum lengkap. Semak baki sewa dan SD.');return;}
- const dates=(d.transactions||[]).filter(t=>Number(t.amount||0)>0&&!t.voided).map(t=>t.date||'').filter(Boolean).sort();
- v5rOpenReceipt({title:full?'RESIT BAYARAN PENUH':'RESIT BAYARAN PENGINAPAN',receiptNo:v5rReceiptNo(full?'FULL':'PAY',d.bookingNo,d.receiptNo),date:dates.pop()||localTodayISO(),platform:d.platform||'Direct',guestName:d.guestName||d.guest||'-',phone:d.phone||'-',checkIn:d.checkIn||'',checkOut:d.checkOut||'',bookingNo:d.bookingNo||'-',amount:a.rentalReceived,amountLabel:'BAYARAN SEWA / CAJ DITERIMA (TANPA SD)',items:[{label:'Sewa dan caj penginapan',sub:a.direct?'Harga sewa villa dan caj berkaitan':'Sewa melalui platform; resit ini memaparkan bayaran yang direkod dalam Admin sahaja',amount:a.rentalDue},{label:'Security Deposit (SD) - berasingan',sub:'Lihat pecahan diterima, dipulangkan dan masih dipegang di bawah',amount:a.sdRequired}],subtotal:a.rentalDue,balance:a.rentalBalance,settlement:a,note:'Resit berdasarkan rekod semasa. Bayaran sewa dan pergerakan SD dipaparkan berasingan.'});
+function v5rOpenFullReceiptFromBooking(i){
+ const d=bookingCache[i];if(!v5rBookingFullPaid(d)){alert("Booking ini belum selesai bayaran penuh.");return;}
+ const tx=Array.isArray(d.transactions)?d.transactions:[];
+ const m=typeof v21710MathCore==="function"?v21710MathCore(d,tx):paymentMathFromBooking(d,tx);
+ const dep=Number(d.securityDeposit??d.deposit??300);
+ const rental=Number(m.rentalOtherDue||0);
+ const total=Number(m.due||rental+dep);
+ const lastDate=tx.filter(t=>Number(t.amount||0)>0).map(t=>t.date||"").sort().pop()||localTodayISO();
+ v5rOpenReceipt({
+  title:"RESIT BAYARAN PENUH",receiptNo:v5rReceiptNo("FULL",d.bookingNo,d.receiptNo),
+  date:lastDate,platform:d.platform||"Direct",guestName:d.guestName||d.guest||"-",phone:d.phone||"-",
+  checkIn:d.checkIn||"",checkOut:d.checkOut||"",bookingNo:d.bookingNo||"-",
+  amount:total,amountLabel:"TOTAL FULL PAYMENT",
+  items:[
+   {label:"Villa Rental / Accommodation",sub:`THE 5R VILLA • ${v5rDateDisplay(d.checkIn)} hingga ${v5rDateDisplay(d.checkOut)}`,amount:rental},
+   {label:"Security Deposit",sub:"Refundable subject to clearance post check-out",amount:dep}
+  ],
+  subtotal:total,balance:0,note:"Payment Reference: Full settlement for THE 5R VILLA. Security Deposit remains subject to check-out inspection before refund."
+ });
 }
-function v5rOpenFullReceiptFromBooking(i){v224OpenSettlementReceipt(i,true);}
 async function v5rEnsurePdf(){
  if(window.html2pdf)return;
  await new Promise((resolve,reject)=>{
@@ -9568,7 +9597,7 @@ function v5rPdfName(){
 async function v5rBuildPdfBlob(){
  if(!v5rCurrentReceipt)throw new Error("Tiada resit aktif.");
  await v5rEnsurePdf();
- return await window.html2pdf().set({margin:0,filename:v5rPdfName(),image:{type:"jpeg",quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff"},jsPDF:{unit:"px",format:[794,1123],orientation:"portrait"}}).from($("v5rReceiptPaper")).toPdf().outputPdf("blob");
+ return await window.html2pdf().set({margin:0,filename:v5rPdfName(),image:{type:"jpeg",quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",windowWidth:794,scrollX:0,scrollY:0},pagebreak:{mode:["avoid-all","css","legacy"]},jsPDF:{unit:"px",format:[794,1123],orientation:"portrait"}}).from($("v5rReceiptPaper")).toPdf().outputPdf("blob");
 }
 async function v5rDownloadReceiptPdf(){
  try{
@@ -9614,7 +9643,34 @@ THE 5R VILLA`;
  }catch(e){if(e?.name!=="AbortError")alert("Share PDF gagal: "+(e?.message||e));}
 }
 
-function v5rOpenBookingReceipt(i){v224OpenSettlementReceipt(i,false);}
+function v5rOpenBookingReceipt(i){
+ const d=bookingCache[i];if(!d)return;
+ const tx=Array.isArray(d.transactions)?d.transactions:[];
+ const m=typeof v21710MathCore==="function"?v21710MathCore(d,tx):paymentMathFromBooking(d,tx);
+ const isDirect=String(d.platform||"Direct").toLowerCase()==="direct";
+ const rent=Number(d.rent||0);
+ const deposit=Number(d.securityDeposit??d.deposit??300);
+ const incoming=Number(m.incoming||0);
+ const totalDue=Number(m.due||((isDirect?rent:0)+deposit));
+ const balance=Number(m.balance||0);
+ const receiptNo=String(d.receiptNo||"").trim() || String(d.bookingNo||"5RV").replace("5RV-BKG-","5RV-RCP-") || "DRAFT";
+ const paidDates=tx.filter(t=>Number(t.amount||0)>0&&String(t.type||"")!=="Refund").map(t=>String(t.date||"")).filter(Boolean).sort();
+ const receiptDate=paidDates.length?paidDates[paidDates.length-1]:localTodayISO();
+ const items=[];
+ if(isDirect && rent>0)items.push({label:"Villa Rental / Accommodation",sub:`THE 5R VILLA • ${v5rDateDisplay(d.checkIn)} hingga ${v5rDateDisplay(d.checkOut)}`,amount:rent});
+ if(deposit>0)items.push({label:"Security Deposit",sub:"Refundable subject to clearance post check-out",amount:deposit});
+ if(!items.length)items.push({label:"Booking / Payment",amount:totalDue});
+ v5rOpenReceipt({
+  title:"BOOKING & PAYMENT RECEIPT",
+  receiptNo,date:receiptDate,platform:String(d.platform||"Direct").trim()||"Direct",
+  guestName:d.guestName||d.guest||"-",phone:d.phone||"-",
+  checkIn:d.checkIn||"",checkOut:d.checkOut||"",bookingNo:d.bookingNo||"-",
+  amount:incoming,amountLabel:"TOTAL RECEIVED",
+  items,subtotal:totalDue,balance,
+  note:"Payment Reference: Booking / accommodation at THE 5R VILLA. Generated automatically from current Admin payment records."
+ });
+}
+
 
 function v5rInvoiceNo(d){
  const b=String(d?.bookingNo||"").trim();
@@ -9630,8 +9686,40 @@ function v5rInvoiceDueDate(d){
  return String(d?.paymentDueDate||d?.checkIn||localTodayISO()).slice(0,10);
 }
 function v5rInvoiceData(d){
- const a=v224Settlement(d);
- return {invoiceNo:v5rInvoiceNo(d),invoiceDate:v5rInvoiceDate(d),dueDate:v5rInvoiceDueDate(d),guestName:d?.guestName||d?.guest||'-',phone:d?.phone||'-',platform:d?.platform||'Direct',bookingNo:d?.bookingNo||'-',checkIn:d?.checkIn||'',checkOut:d?.checkOut||'',items:[{label:'Sewa dan caj penginapan',sub:a.direct?'Sewa villa dan caj berkaitan':'Bayaran penginapan melalui platform; rujuk invois platform',amount:a.rentalDue},{label:'Security Deposit (SD) - berasingan',sub:'Deposit boleh dipulangkan; lihat status di bawah',amount:a.sdRequired}],subtotal:a.rentalDue,paid:a.rentalReceived,balance:a.rentalBalance,settlement:a,status:a.rentalBalance<=0&&a.sdOutstanding<=0?'PAID':'OUTSTANDING'};
+ const tx=Array.isArray(d?.transactions)?d.transactions:[];
+ const m=typeof v21710MathCore==="function"?v21710MathCore(d,tx):paymentMathFromBooking(d,tx);
+ const isDirect=String(d?.platform||"Direct").toLowerCase()==="direct";
+ const rent=Number(d?.rent||0);
+ const deposit=Number(d?.securityDeposit??d?.deposit??300);
+ const rentalDue=isDirect?rent:Number(m?.rentalOtherDue||0);
+ const subtotal=Number(m?.due||rentalDue+deposit);
+ const paid=Number(m?.incoming||0);
+ const balance=Math.max(0,Number(m?.balance||subtotal-paid));
+ const items=[];
+ if(rentalDue>0)items.push({
+  label:"Villa Rental / Accommodation",
+  sub:`THE 5R VILLA • ${v5rDateDisplay(d?.checkIn)} hingga ${v5rDateDisplay(d?.checkOut)}`,
+  amount:rentalDue
+ });
+ if(deposit>0)items.push({
+  label:"Security Deposit",
+  sub:"Refundable subject to clearance post check-out",
+  amount:deposit
+ });
+ if(!items.length)items.push({label:"Booking / Accommodation",amount:subtotal});
+ return {
+  invoiceNo:v5rInvoiceNo(d),
+  invoiceDate:v5rInvoiceDate(d),
+  dueDate:v5rInvoiceDueDate(d),
+  guestName:d?.guestName||d?.guest||"-",
+  phone:d?.phone||"-",
+  platform:String(d?.platform||"Direct").trim()||"Direct",
+  bookingNo:d?.bookingNo||"-",
+  checkIn:d?.checkIn||"",
+  checkOut:d?.checkOut||"",
+  items,subtotal,paid,balance,
+  status:balance<=0?"PAID":"OUTSTANDING"
+ };
 }
 function v5rInvoiceHtml(x){
  return `<div id="v5rReceiptDoc">
@@ -9663,7 +9751,7 @@ function v5rInvoiceHtml(x){
     <div class="v5r-r-row"><b>Check-out</b><span>:</span><span>${esc(v5rDateDisplay(x.checkOut))}</span></div>
    </div>
    <div class="v5r-r-amount">
-    <div class="label">BAKI SEWA / CAJ BELUM DIBAYAR (TANPA SD)</div>
+    <div class="label">BALANCE DUE</div>
     <div class="value">RM ${v5rMoney(x.balance)}</div>
    </div>
   </div>
@@ -9673,7 +9761,11 @@ function v5rInvoiceHtml(x){
    <tbody>${x.items.map(it=>`<tr><td><b>${esc(it.label)}</b>${it.sub?`<br><span style="font-size:10px;color:#64748b">${esc(it.sub)}</span>`:""}</td><td><b>RM ${v5rMoney(it.amount)}</b></td></tr>`).join("")}</tbody>
   </table>
 
-  ${v224Summary(x)}
+  <table class="v5r-inv-summary">
+   <tr><td>Subtotal</td><td>RM ${v5rMoney(x.subtotal)}</td></tr>
+   <tr><td>Paid to Date</td><td>RM ${v5rMoney(x.paid)}</td></tr>
+   <tr class="total"><td>Balance Due</td><td>RM ${v5rMoney(x.balance)}</td></tr>
+  </table>
 
   <div class="v5r-r-terms">
    <h3>📄 TERMS & CONDITIONS</h3>
@@ -9716,8 +9808,6 @@ Object.assign(window,{
  v5rOpenTandaReceiptFromRequest,v5rOpenTandaReceiptFromBooking,v5rOpenFullReceiptFromBooking,v5rOpenBookingReceipt,v5rOpenInvoiceFromBooking,
  v5rCloseReceipt,v5rDownloadReceiptPdf,v5rShareReceiptWhatsApp
 });
-window.THE5R_DOCUMENT_SD_VERSION="V2.22.4_RENTAL_SD_SEPARATE";
-window.THE5R_EDIT_FIX_VERSION="V2.22.3_EDIT_METADATA_PRESERVED";
 window.THE5R_SAFE_RECEIPT_VERSION="SAFE_RECEIPTS_FROM_6MONTH_ERROR_SCOPE_FIX";
 window.THE5R_PAYMENT_APPEND_FIX_VERSION="V2.20.7_PAYMENT_APPEND_AND_LOGO_FIX";
 window.THE5R_RECEIPT_DETAIL_FIX_VERSION="V2.20.8_RECEIPT_DETAILS_AND_BALANCE_FIX";
@@ -10205,6 +10295,7 @@ window.THE5R_SD_REFUND_GUARD_FIX_VERSION="V2.21.3_SD300_REFUND_CONSISTENCY";
 window.THE5R_PAYMENT_ACCOUNT_REPORT_VERSION="V2.22.0_MAYBANK_DEPOSIT_MONTHLY_PDF";
 window.THE5R_PLATFORM_NETPAY_VERSION="V2.22.1_PLATFORM_NETPAY_REQUIRED_REPORT";
 window.THE5R_SD_POCKET_VERSION="V2.22.2_SD_SEPARATE_POCKET";
+window.THE5R_RECEIPT_LAYOUT_VERSION="V2.23.0_A4_RESPONSIVE_FIX";
 
 // ============================================================
 // V2.21.3 — AUTHORITATIVE DIRECT PAYMENT ALLOCATION
