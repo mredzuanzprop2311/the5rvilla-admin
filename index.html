@@ -1016,6 +1016,41 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
 @media(max-width:650px){#v5rReceiptModal{padding:5px}#v5rReceiptPaper{transform-origin:top left}.v5r-r-head{grid-template-columns:90px 1fr}.v5r-r-title{grid-column:1/-1;text-align:left}.v5r-r-meta-row{grid-template-columns:82px minmax(0,1fr)}.v5r-r-box{grid-template-columns:1fr}}
 </style>
 
+
+<style id="v222-payment-report-style">
+.v222-report{margin-top:18px;border:1px solid #dbe7f2;border-radius:16px;padding:16px;background:#fff}
+.v222-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.v222-head h3{margin:0;color:#17365d}.v222-sub{font-size:11px;color:#64748b;line-height:1.5;margin-top:4px}
+.v222-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:14px 0}
+.v222-controls label{font-size:11px;font-weight:800;color:#475569;min-width:130px}
+.v222-controls select{width:100%;margin-top:4px}
+.v222-controls button{width:auto;margin:0;padding:10px 14px}
+.v222-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:12px 0}
+.v222-card{border:1px solid #e2e8f0;border-radius:12px;padding:11px;background:#f8fafc}
+.v222-card span{display:block;font-size:10px;font-weight:850;color:#64748b}
+.v222-card strong{display:block;font-size:20px;color:#17365d;margin-top:4px}
+.v222-card small{display:block;font-size:9px;color:#64748b;margin-top:4px}
+.v222-account{margin-top:12px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+.v222-account-head{padding:10px 12px;font-size:12px;font-weight:950;background:#eef6ff;color:#17365d;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.v222-account.deposit .v222-account-head{background:#fff7ed;color:#9a3412}
+.v222-table-wrap{overflow:auto;max-height:420px}
+.v222-table{width:100%;border-collapse:collapse;font-size:10px;min-width:760px}
+.v222-table th,.v222-table td{padding:8px 9px;border-bottom:1px solid #edf2f7;text-align:left;vertical-align:top}
+.v222-table th{position:sticky;top:0;background:#f8fafc;color:#475569;font-weight:900;z-index:1}
+.v222-table td.amt{text-align:right;font-weight:900;white-space:nowrap}
+.v222-pill{display:inline-block;padding:3px 7px;border-radius:999px;font-size:9px;font-weight:900}
+.v222-pill.rental{background:#ecfdf3;color:#166534}.v222-pill.sd{background:#fff7ed;color:#9a3412}.v222-pill.refund{background:#fef2f2;color:#991b1b}
+.v222-empty{padding:16px;color:#64748b;font-size:11px;text-align:center}
+.v222-policy{margin-top:10px;padding:10px 12px;border-radius:10px;background:#f1f5f9;color:#475569;font-size:10px;line-height:1.5}
+.v222-pocket{margin-top:14px;border:1px solid #fed7aa;border-radius:12px;background:#fffaf3;overflow:hidden}
+.v222-pocket-btn{width:100%;margin:0;border:0;border-radius:0;background:#fff7ed;color:#9a3412;padding:12px 14px;font-weight:950;text-align:left;display:flex;justify-content:space-between;align-items:center}
+.v222-pocket-body{display:none;padding:12px}
+.v222-pocket.open .v222-pocket-body{display:block}
+.v222-pocket .v222-account{margin-top:0}
+
+@media(max-width:700px){.v222-summary{grid-template-columns:1fr 1fr}.v222-controls label{min-width:calc(50% - 8px)}}
+</style>
+
 </head>
 <body>
 <div class="wrap">
@@ -1141,6 +1176,7 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
      <div class="item"><div class="label">Baki</div><div id="balanceView" class="value">RM 300.00</div></div>
      <div class="item"><div class="label">Status Bayaran</div><div id="paymentStatusView" class="value pay-bad">UNPAID</div></div>
     </div>
+    <div id="v2213AllocationHint" style="margin-top:10px;padding:12px 14px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:12px;color:#166534;font-weight:800;font-size:12px;line-height:1.55">AUTO ALLOCATION akan dipaparkan di sini.</div>
    </div>
    <div class="full"><label>Catatan</label><textarea id="notes"></textarea></div>
   </div>
@@ -1722,6 +1758,7 @@ function txIsRefund(type){ return type==="Refund"; }
 function createTransactionRow(data={}){
  const row=document.createElement("div");
  row.className="tx-row";
+ row.v223OriginalTx=structuredClone(data);
  row.innerHTML=`
   <div><label>Jenis</label><select class="tx-type">${TX_TYPES.map(t=>`<option value="${t}" ${data.type===t?"selected":""}>${txTypeLabel(t)}</option>`).join("")}</select></div>
   <div><label>Tarikh</label><input class="tx-date" type="date" value="${data.date||""}"></div>
@@ -1738,6 +1775,7 @@ function createTransactionRow(data={}){
 
 function getTransactions(){
  return [...document.querySelectorAll("#transactionRows .tx-row")].map(row=>({
+  ...(row.v223OriginalTx||{}),
   type:row.querySelector(".tx-type").value,
   date:row.querySelector(".tx-date").value,
   amount:Number(row.querySelector(".tx-amount").value||0),
@@ -1789,6 +1827,27 @@ function v2174SyncPlatformRevenueFields(){
 $("platform")?.addEventListener("change",v2174SyncPlatformRevenueFields);
 $("platform")?.addEventListener("input",v2174SyncPlatformRevenueFields);
 setTimeout(v2174SyncPlatformRevenueFields,0);
+
+
+function v2221ValidatePlatformNetPay(){
+ const platform=String($("platform")?.value||"Direct");
+ if(platform==="Direct")return true;
+
+ const net=Number($("platformNetPayoutExpected")?.value||0);
+ const payoutDate=String($("platformPayoutDate")?.value||"").trim();
+
+ if(!(net>0)){
+  alert(`${platform}: Net Pay / Net Payout wajib diisi untuk tally dengan akaun 5R.`);
+  $("platformNetPayoutExpected")?.focus();
+  return false;
+ }
+ if(!payoutDate){
+  alert(`${platform}: Tarikh Net Pay / Payout wajib diisi supaya laporan bulanan tepat.`);
+  $("platformPayoutDate")?.focus();
+  return false;
+ }
+ return true;
+}
 
 function formData(){
  const m=getPaymentMath();
@@ -2052,6 +2111,7 @@ $("confirmDelete").onclick=async()=>{
 };
 
 $("save").onclick=async()=>{
+ if(!v2221ValidatePlatformNetPay())return;
  const data=formData();
 
  if(!data.guestName||!data.checkIn||!data.checkOut){
@@ -2104,6 +2164,7 @@ $("save").onclick=async()=>{
   if(editId){
    await updateDoc(doc(db,"bookings",editId),{
     ...data,
+    __v223EditBase:v223EditBase?.id===editId?v223EditBase:null,
     updatedAt:serverTimestamp()
    });
    $("saveStatus").className="status ok";
@@ -3077,33 +3138,17 @@ window.markCheckIn=markCheckIn;
 window.markCheckOut=markCheckOut;
 
 
-function v2213ArrangeDashboardPriority(){
+function v2211d2PlaceActionBelowWhatsApp(){
  const dashboard=$("v214DashboardPanel");
  const wa=$("v2189WaAlerts");
- if(!dashboard||!wa||wa.parentElement!==dashboard)return;
+ if(!dashboard||!wa)return null;
 
- // These may currently live inside #v60Dashboard.
- const stayTitle=$("v216CurrentStayTitle");
- const stayDash=$("v216CurrentStayDash");
- const actionNeeded=document.querySelector("#v60Dashboard .v61-action, #v214DashboardPanel > .v61-action");
-
- let anchor=wa;
-
- // 1) WhatsApp Alert
- // 2) Current Stay / Checkout Monitor
- if(stayTitle){
-  anchor.insertAdjacentElement("afterend",stayTitle);
-  anchor=stayTitle;
+ // Action Needed originally lives inside #v60Dashboard.
+ const action=document.querySelector("#v60Dashboard .v61-action, #v214DashboardPanel > .v61-action");
+ if(action && wa.nextElementSibling!==action){
+  wa.insertAdjacentElement("afterend",action);
  }
- if(stayDash){
-  anchor.insertAdjacentElement("afterend",stayDash);
-  anchor=stayDash;
- }
-
- // 3) Action Needed
- if(actionNeeded){
-  anchor.insertAdjacentElement("afterend",actionNeeded);
- }
+ return action||null;
 }
 
 function updateDashboard(){
@@ -3143,13 +3188,13 @@ function updateDashboard(){
    const buttons=hasBalance?`<button class="v63-paybtn" onclick="openQuickPayment(${x.i})">Payment</button><button class="v61-wa" onclick="openBalanceReminder(${x.i})">WhatsApp Reminder</button>`:`<button class="v61-wa" onclick="sendCheckinWhatsApp(${x.i})">WhatsApp Check-in</button>`;
    return `<div class="v214-dashboard-action">
     <div class="v214-booking-top"><div><div class="who">${esc(x.d.guestName||x.d.guest||"-")}</div><div class="sub">${esc(x.d.platform||"-")} • ${esc(x.d.phone||"-")}</div></div><span class="v214-chip ${chip}">${label}</span></div>
-    <div class="when">${esc(shortDate(x.d.checkIn))} → ${esc(shortDate(x.d.checkOut||""))}</div>
+    <div class="when">${esc(shortDate(x.d.checkIn))} → ${esc(shortDate(x.d.checkOut||""))} ${v5rGuestNightsLabel(x.d)?`• ${v5rGuestNightsLabel(x.d)}`:""}</div>
     <div class="sub">${hasBalance?`Baki RM ${Number(x.d.balance||0).toFixed(2)} • `:""}${esc(x.d.bookingNo||"")}</div>
     <div class="actions">${buttons}</div>
    </div>`;
   }).join(""):'<div class="v60-mini">Tiada tindakan segera.</div>';
  }
- v2213ArrangeDashboardPriority();
+ v2211d2PlaceActionBelowWhatsApp();
 }
 $("refreshDashboard")?.addEventListener("click",updateDashboard);
 window.openBalanceReminder=openBalanceReminder;
@@ -3513,7 +3558,7 @@ function renderV214BookingCards(mode){
   if(current)actions=`<button class="green" onclick="sendGuestBookingUpdate(${i})">WhatsApp Update</button><button class="v64-statusbtn v64-checkout" onclick="markCheckOut(${i})">Check-out</button><button class="gray" onclick="viewBooking(${i})">View</button>`;
   else if(completed)actions=`<button class="gray" onclick="viewBooking(${i})">View</button><button class="blue" onclick="viewReceipt(${i})">Receipt</button>`;
   else{const wa=bal>0?`<button class="green" onclick="openBalanceReminder(${i})">WhatsApp Reminder</button>`:`<button class="green" onclick="sendCheckinWhatsApp(${i})">WhatsApp Check-in</button>`;actions=`${wa}<button class="blue" onclick="openQuickPayment(${i})">Payment</button><button class="gray" onclick="viewBooking(${i})">View</button><button class="gray" onclick="editBooking(${i})">Edit</button>`;}
-  return `<div class="v214-booking-card ${current?"current":completed?"completed":""}"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${v214PaymentChip(d)}</div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))}</div><div class="v214-booking-money">${esc(d.bookingNo||"")} ${bal>0?`• Baki <b>RM ${bal.toFixed(2)}</b>`:"• Baki RM 0.00"}</div><div class="v214-booking-actions">${actions}</div></div>`;
+  return `<div class="v214-booking-card ${current?"current":completed?"completed":""}"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${v214PaymentChip(d)}</div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="v214-booking-money">${esc(d.bookingNo||"")} ${bal>0?`• Baki <b>RM ${bal.toFixed(2)}</b>`:"• Baki RM 0.00"}</div><div class="v214-booking-actions">${actions}</div></div>`;
  }).join(""):'<div class="status ok">Tiada booking dalam kategori ini.</div>';
  if($("count"))$("count").textContent=items.length+" shown • "+bookingCache.length+" total";
 }
@@ -3874,10 +3919,12 @@ Jika ada pertanyaan, boleh balas WhatsApp ini. Terima kasih.`;
 }
 window.sendGuestBookingUpdate=sendGuestBookingUpdate;
 
+let v223EditBase=null;
 function editBooking(i){
  if(window.v214ActivateTab) window.v214ActivateTab("upcoming");
  document.getElementById("bookingFormCard")?.classList.remove("v214-form-hidden");
  const d=bookingCache[i];
+ v223EditBase={id:d.id,transactions:structuredClone(d.transactions||[])};
  $("editId").value=d.id;
  $("guestName").value=d.guestName||d.guest||"";
  $("phone").value=d.phone||"";
@@ -3978,7 +4025,7 @@ async function v216SetGrade(i,grade){const d=bookingCache[i];if(!d)return;let no
 window.v216SendPostStay=v216SendPostStay;window.v216SendPromo=v216SendPromo;window.v216SetGrade=v216SetGrade;
 function v216EnsureWAFields(){const box=document.querySelector(".v65-template");if(!box||$("poststayTemplate"))return;const wrap=document.createElement("div");wrap.className="v216-wa-extra";wrap.innerHTML=`<div><label>Template Selepas Check-out / Thank You + Review</label><textarea id="poststayTemplate"></textarea></div><div><label>Template Green Guest Promo / Repeat Guest</label><textarea id="promoTemplate"></textarea><div class="help">Placeholder: {guest}, {promoMessage}</div></div>`;const actions=box.querySelector(".actions");box.insertBefore(wrap,actions);$("poststayTemplate").value=localStorage.getItem("the5r_poststay_template")||V216_POSTSTAY_DEFAULT;$("promoTemplate").value=localStorage.getItem("the5r_promo_template")||V216_PROMO_DEFAULT;const btn=document.createElement("button");btn.type="button";btn.className="green";btn.textContent="SIMPAN 4 TEMPLATE V2.16";btn.addEventListener("click",async()=>{const ci=$("checkinTemplate").value,co=$("checkoutTemplate").value,ps=$("poststayTemplate").value,pr=$("promoTemplate").value;localStorage.setItem("the5r_checkin_template",ci);localStorage.setItem("the5r_checkout_template",co);localStorage.setItem("the5r_poststay_template",ps);localStorage.setItem("the5r_promo_template",pr);try{await setDoc(doc(db,"settings","waTemplates"),{checkinTemplate:ci,checkoutTemplate:co,poststayTemplate:ps,promoTemplate:pr,updatedAt:serverTimestamp()},{merge:true});alert("Semua 4 WhatsApp template berjaya disimpan.")}catch(e){alert("Template disimpan di browser, tetapi sync Firebase gagal: "+e.message)}});actions?.appendChild(btn);getDoc(doc(db,"settings","waTemplates")).then(s=>{if(!s.exists())return;const d=s.data()||{};if(d.poststayTemplate){$("poststayTemplate").value=d.poststayTemplate;localStorage.setItem("the5r_poststay_template",d.poststayTemplate)}if(d.promoTemplate){$("promoTemplate").value=d.promoTemplate;localStorage.setItem("the5r_promo_template",d.promoTemplate)}}).catch(()=>{});}
 function v216CurrentMonthBookings(){const key=localTodayISO().slice(0,7);return bookingCache.map((d,i)=>({d,i})).filter(x=>String(x.d.checkIn||"").startsWith(key)||String(x.d.checkOut||"").startsWith(key));}
-updateDashboard=function(){if(!Array.isArray(bookingCache))return;const today=localTodayISO(),month=today.slice(0,7),currentMonth=v216CurrentMonthBookings(),current=currentMonth.filter(x=>x.d.checkInAt&&!x.d.checkOutAt),active=currentMonth.filter(x=>!x.d.checkOutAt&&!["cancelled","rejected"].includes(String(x.d.status||"").toLowerCase())),action=active.map(x=>({...x,days:v216Days(x.d.checkIn)})).filter(x=>{const pi=v216PaymentInfo(x.d),platformDue=v216IsPlatform(x.d)&&x.days<=1&&x.days>=0&&pi.label.includes("PENDING");return(x.days>=0&&x.days<=2)||Number(x.d.balance||0)>0||platformDue}).sort((a,b)=>a.days-b.days);if($("dashConfirmed"))$("dashConfirmed").textContent=active.length;if($("dashCheckinToday"))$("dashCheckinToday").textContent=active.filter(x=>x.d.checkIn===today).length;if($("dashCheckoutToday"))$("dashCheckoutToday").textContent=active.filter(x=>x.d.checkOut===today).length;if($("dashCurrentlyIn"))$("dashCurrentlyIn").textContent=current.length;if($("dashOutstanding"))$("dashOutstanding").textContent="RM "+active.reduce((s,x)=>s+Number(x.d.balance||0),0).toFixed(2);if($("dashRefund"))$("dashRefund").textContent="RM "+currentMonth.reduce((s,x)=>s+Number(x.d.totalRefund||0),0).toFixed(2);const dash=$("v60Dashboard");let mt=$("v216DashboardMonth");if(!mt&&dash){mt=document.createElement("div");mt.id="v216DashboardMonth";mt.className="v216-dashboard-month";dash.insertBefore(mt,dash.firstChild)}if(mt)mt.textContent=v216MonthLabel(month);if($("dashActionNeeded"))$("dashActionNeeded").innerHTML=action.length?action.map(x=>{const d=x.d,pi=v216PaymentInfo(d),days=v216DaysLabel(d.checkIn);let primary="";if(v216IsPlatform(d)&&x.days<=1&&pi.label.includes("PENDING"))primary=`<button class="v61-wa" onclick="sendPaymentReminder(${x.i})">WhatsApp SD RM300</button><button class="v63-paybtn" onclick="openQuickPayment(${x.i})">Record SD</button>`;else if(Number(d.balance||0)>0)primary=`<button class="v61-wa" onclick="openBalanceReminder(${x.i})">WhatsApp Reminder</button><button class="v63-paybtn" onclick="openQuickPayment(${x.i})">Payment</button>`;else primary=`<button class="v61-wa" onclick="sendCheckinWhatsApp(${x.i})">WhatsApp Check-in</button>`;return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip soon">${esc(days)}</span></div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions">${primary}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`}).join(""):'<div class="v60-mini">Tiada tindakan segera bulan ini.</div>';{
+updateDashboard=function(){if(!Array.isArray(bookingCache))return;const today=localTodayISO(),month=today.slice(0,7),currentMonth=v216CurrentMonthBookings(),current=currentMonth.filter(x=>x.d.checkInAt&&!x.d.checkOutAt),active=currentMonth.filter(x=>!x.d.checkOutAt&&!["cancelled","rejected"].includes(String(x.d.status||"").toLowerCase())),action=active.map(x=>({...x,days:v216Days(x.d.checkIn)})).filter(x=>{const pi=v216PaymentInfo(x.d),platformDue=v216IsPlatform(x.d)&&x.days<=1&&x.days>=0&&pi.label.includes("PENDING");return(x.days>=0&&x.days<=2)||Number(x.d.balance||0)>0||platformDue}).sort((a,b)=>a.days-b.days);if($("dashConfirmed"))$("dashConfirmed").textContent=active.length;if($("dashCheckinToday"))$("dashCheckinToday").textContent=active.filter(x=>x.d.checkIn===today).length;if($("dashCheckoutToday"))$("dashCheckoutToday").textContent=active.filter(x=>x.d.checkOut===today).length;if($("dashCurrentlyIn"))$("dashCurrentlyIn").textContent=current.length;if($("dashOutstanding"))$("dashOutstanding").textContent="RM "+active.reduce((s,x)=>s+Number(x.d.balance||0),0).toFixed(2);if($("dashRefund"))$("dashRefund").textContent="RM "+currentMonth.reduce((s,x)=>s+Number(x.d.totalRefund||0),0).toFixed(2);const dash=$("v60Dashboard");let mt=$("v216DashboardMonth");if(!mt&&dash){mt=document.createElement("div");mt.id="v216DashboardMonth";mt.className="v216-dashboard-month";dash.insertBefore(mt,dash.firstChild)}if(mt)mt.textContent=v216MonthLabel(month);if($("dashActionNeeded"))$("dashActionNeeded").innerHTML=action.length?action.map(x=>{const d=x.d,pi=v216PaymentInfo(d),days=v216DaysLabel(d.checkIn);let primary="";if(v216IsPlatform(d)&&x.days<=1&&pi.label.includes("PENDING"))primary=`<button class="v61-wa" onclick="sendPaymentReminder(${x.i})">WhatsApp SD RM300</button><button class="v63-paybtn" onclick="openQuickPayment(${x.i})">Record SD</button>`;else if(Number(d.balance||0)>0)primary=`<button class="v61-wa" onclick="openBalanceReminder(${x.i})">WhatsApp Reminder</button><button class="v63-paybtn" onclick="openQuickPayment(${x.i})">Payment</button>`;else primary=`<button class="v61-wa" onclick="sendCheckinWhatsApp(${x.i})">WhatsApp Check-in</button>`;return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip soon">${esc(days)}</span></div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions">${primary}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`}).join(""):'<div class="v60-mini">Tiada tindakan segera bulan ini.</div>';{
   const anchor=$("dashCurrentStayAnchor");
   document.querySelectorAll("#v216CurrentStayDash,#v216CurrentStayTitle").forEach(el=>el.remove());
   if(anchor && current.length){
@@ -3993,7 +4040,7 @@ updateDashboard=function(){if(!Array.isArray(bookingCache))return;const today=lo
              <div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>
              <span class="v214-chip ${pi.cls}">${esc(pi.label)}</span>
            </div>
-           <div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))}</div>
+           <div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div>
            <div class="v216-actions">
              <button class="green" onclick="sendGuestBookingUpdate(${x.i})">WhatsApp Update</button>
              <button class="v64-statusbtn v64-checkout" onclick="markCheckOut(${x.i})">Check-out</button>
@@ -4006,7 +4053,7 @@ updateDashboard=function(){if(!Array.isArray(bookingCache))return;const today=lo
     );
   }
 }};
-renderV214BookingCards=function(mode){const cloud=$("bookingCloudCard");if(!cloud)return;let holder=$("v214BookingCards");if(!holder){holder=document.createElement("div");holder.id="v214BookingCards";holder.className="v214-booking-cards";const table=cloud.querySelector("table");if(table)table.insertAdjacentElement("beforebegin",holder);else cloud.appendChild(holder)}const currentMonth=localTodayISO().slice(0,7);if(mode==="upcoming"){const items=bookingCache.map((d,i)=>({d,i})).filter(x=>{const d=x.d,done=!!d.checkOutAt||String(d.status||"").toLowerCase()==="completed",cancel=["cancelled","rejected"].includes(String(d.status||"").toLowerCase());return d.checkIn&&v216MonthKey(d.checkIn)>currentMonth&&!done&&!cancel}).sort((a,b)=>String(a.d.checkIn).localeCompare(String(b.d.checkIn))),groups={};items.forEach(x=>(groups[v216MonthKey(x.d.checkIn)]??=[]).push(x));holder.innerHTML=Object.keys(groups).length?Object.keys(groups).sort().map(k=>`<div class="v216-month-title">${v216MonthLabel(k)}</div>${groups[k].map(({d,i})=>{const pi=v216PaymentInfo(d),days=v216Days(d.checkIn);let actions=v216IsPlatform(d)?`${days<=1&&days>=0&&pi.label.includes("PENDING")?`<button class="green" onclick="sendPaymentReminder(${i})">WhatsApp</button>`:""}<button class="blue" onclick="openQuickPayment(${i})">Payment / SD</button><button class="gray" onclick="viewBooking(${i})">View</button>${v2163MoreMenu(i)}`:`${Number(d.balance||0)>0?`<button class="green" onclick="openBalanceReminder(${i})">WhatsApp</button>`:`<button class="green" onclick="sendCheckinWhatsApp(${i})">WhatsApp</button>`}<button class="blue" onclick="openQuickPayment(${i})">Payment</button><button class="gray" onclick="viewBooking(${i})">View</button>${v2163MoreMenu(i)}`;return `<div class="v214-booking-card"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))}</div><div class="v214-booking-money"><b>${esc(v216DaysLabel(d.checkIn))}</b> • ${esc(pi.sub)}</div>${v2169ProgressHtml(d)}<div class="v216-receiptline">${v216ReceiptSummary(d)}</div><div class="v214-booking-actions">${actions}</div></div>`}).join("")}`).join(""):'<div class="status ok">Tiada upcoming booking bulan depan dan seterusnya.</div>'}else if(mode==="completed"){const items=bookingCache.map((d,i)=>({d,i})).filter(x=>!!x.d.checkOutAt||String(x.d.status||"").toLowerCase()==="completed"||String(x.d.stayStatus||"").toLowerCase()==="checked-out").sort((a,b)=>String(b.d.checkIn||"").localeCompare(String(a.d.checkIn||""))),good=items.filter(x=>String(x.d.guestGrade||"green").toLowerCase()!=="red"),red=items.filter(x=>String(x.d.guestGrade||"").toLowerCase()==="red"),card=({d,i},isRed=false)=>{const grade=String(d.guestGrade||"").toLowerCase();return `<div class="v214-booking-card completed ${isRed?"v216-red-card":"v216-green-card"}"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${isRed?"unpaid":"paid"}">${isRed?"RED GUEST":grade==="green"?"GREEN GUEST":"COMPLETED"}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))}</div>${v2169ProgressHtml(d)}${isRed&&d.guestGradeNote?`<div class="v216-guest-note"><b>Note:</b> ${esc(d.guestGradeNote)}</div>`:""}<div class="v216-receipt-history">${v216ReceiptSummary(d)}</div><div class="v216-gradebar">${!isRed?`<button class="green" onclick="v216SetGrade(${i},'green')">✓ Green Guest</button><button class="red" onclick="v216SetGrade(${i},'red')">Red Guest</button><button class="green" onclick="v216SendPostStay(${i})">Thank You / Review</button><button class="blue" onclick="v216SendPromo(${i})">Send Promo WhatsApp</button>`:`<button class="green" onclick="v216SetGrade(${i},'green')">Move to Green</button>`}<button class="gray" onclick="viewBooking(${i})">View History</button>${v2163MoreMenu(i,{allowEdit:true,allowDelete:true,allowReceipt:true})}</div></div>`};holder.innerHTML=`<div><div class="v216-section-title"><h3>Completed / Green Guests</h3><span>Repeat guest / sesuai untuk promo</span></div>${good.length?good.map(x=>card(x,false)).join(""):'<div class="status ok">Tiada completed guest.</div>'}</div><div><div class="v216-section-title"><h3 style="color:#991b1b">Red Guests</h3><span>Asing terus • tidak masuk promo</span></div>${red.length?red.map(x=>card(x,true)).join(""):'<div class="status ok">Tiada Red Guest.</div>'}</div>`}if($("count"))$("count").textContent=mode==="completed"?"Completed guest history":"Upcoming bookings"};window.renderV214BookingCards=renderV214BookingCards;
+renderV214BookingCards=function(mode){const cloud=$("bookingCloudCard");if(!cloud)return;let holder=$("v214BookingCards");if(!holder){holder=document.createElement("div");holder.id="v214BookingCards";holder.className="v214-booking-cards";const table=cloud.querySelector("table");if(table)table.insertAdjacentElement("beforebegin",holder);else cloud.appendChild(holder)}const currentMonth=localTodayISO().slice(0,7);if(mode==="upcoming"){const items=bookingCache.map((d,i)=>({d,i})).filter(x=>{const d=x.d,done=!!d.checkOutAt||String(d.status||"").toLowerCase()==="completed",cancel=["cancelled","rejected"].includes(String(d.status||"").toLowerCase());return d.checkIn&&v216MonthKey(d.checkIn)>currentMonth&&!done&&!cancel}).sort((a,b)=>String(a.d.checkIn).localeCompare(String(b.d.checkIn))),groups={};items.forEach(x=>(groups[v216MonthKey(x.d.checkIn)]??=[]).push(x));holder.innerHTML=Object.keys(groups).length?Object.keys(groups).sort().map(k=>`<div class="v216-month-title">${v216MonthLabel(k)}</div>${groups[k].map(({d,i})=>{const pi=v216PaymentInfo(d),days=v216Days(d.checkIn);let actions=v216IsPlatform(d)?`${days<=1&&days>=0&&pi.label.includes("PENDING")?`<button class="green" onclick="sendPaymentReminder(${i})">WhatsApp</button>`:""}<button class="blue" onclick="openQuickPayment(${i})">Payment / SD</button><button class="gray" onclick="viewBooking(${i})">View</button>${v2163MoreMenu(i)}`:`${Number(d.balance||0)>0?`<button class="green" onclick="openBalanceReminder(${i})">WhatsApp</button>`:`<button class="green" onclick="sendCheckinWhatsApp(${i})">WhatsApp</button>`}<button class="blue" onclick="openQuickPayment(${i})">Payment</button><button class="gray" onclick="viewBooking(${i})">View</button>${v2163MoreMenu(i)}`;return `<div class="v214-booking-card"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="v214-booking-money"><b>${esc(v216DaysLabel(d.checkIn))}</b> • ${esc(pi.sub)}</div>${v2169ProgressHtml(d)}<div class="v216-receiptline">${v216ReceiptSummary(d)}</div><div class="v214-booking-actions">${actions}</div></div>`}).join("")}`).join(""):'<div class="status ok">Tiada upcoming booking bulan depan dan seterusnya.</div>'}else if(mode==="completed"){const items=bookingCache.map((d,i)=>({d,i})).filter(x=>!!x.d.checkOutAt||String(x.d.status||"").toLowerCase()==="completed"||String(x.d.stayStatus||"").toLowerCase()==="checked-out").sort((a,b)=>String(b.d.checkIn||"").localeCompare(String(a.d.checkIn||""))),good=items.filter(x=>String(x.d.guestGrade||"green").toLowerCase()!=="red"),red=items.filter(x=>String(x.d.guestGrade||"").toLowerCase()==="red"),card=({d,i},isRed=false)=>{const grade=String(d.guestGrade||"").toLowerCase();return `<div class="v214-booking-card completed ${isRed?"v216-red-card":"v216-green-card"}"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${isRed?"unpaid":"paid"}">${isRed?"RED GUEST":grade==="green"?"GREEN GUEST":"COMPLETED"}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div>${v2169ProgressHtml(d)}${isRed&&d.guestGradeNote?`<div class="v216-guest-note"><b>Note:</b> ${esc(d.guestGradeNote)}</div>`:""}<div class="v216-receipt-history">${v216ReceiptSummary(d)}</div><div class="v216-gradebar">${!isRed?`<button class="green" onclick="v216SetGrade(${i},'green')">✓ Green Guest</button><button class="red" onclick="v216SetGrade(${i},'red')">Red Guest</button><button class="green" onclick="v216SendPostStay(${i})">Thank You / Review</button><button class="blue" onclick="v216SendPromo(${i})">Send Promo WhatsApp</button>`:`<button class="green" onclick="v216SetGrade(${i},'green')">Move to Green</button>`}<button class="gray" onclick="viewBooking(${i})">View History</button>${v2163MoreMenu(i,{allowEdit:true,allowDelete:true,allowReceipt:true})}</div></div>`};holder.innerHTML=`<div><div class="v216-section-title"><h3>Completed / Green Guests</h3><span>Repeat guest / sesuai untuk promo</span></div>${good.length?good.map(x=>card(x,false)).join(""):'<div class="status ok">Tiada completed guest.</div>'}</div><div><div class="v216-section-title"><h3 style="color:#991b1b">Red Guests</h3><span>Asing terus • tidak masuk promo</span></div>${red.length?red.map(x=>card(x,true)).join(""):'<div class="status ok">Tiada Red Guest.</div>'}</div>`}if($("count"))$("count").textContent=mode==="completed"?"Completed guest history":"Upcoming bookings"};window.renderV214BookingCards=renderV214BookingCards;
 v214ActivateTab=function(name){v214SetupLayout();document.querySelectorAll(".v214-panel").forEach(p=>p.classList.add("hidden"));document.querySelectorAll(".v214-tab").forEach(b=>b.classList.toggle("active",b.dataset.v214Tab===name));const cloud=$("bookingCloudCard");if(name==="dashboard"){$("v214DashboardPanel")?.classList.remove("hidden");updateDashboard()}if(name==="requests")$("v214RequestsPanel")?.classList.remove("hidden");if(name==="villa")$("v214VillaPanel")?.classList.remove("hidden");if(name==="wa"){$("v214WaPanel")?.classList.remove("hidden");v216EnsureWAFields()}if(["upcoming","completed"].includes(name)){const panel=$(name==="upcoming"?"v214UpcomingPanel":"v214CompletedPanel");panel?.classList.remove("hidden");if(cloud)panel.appendChild(cloud);bookingTableMode=name;if($("bookingCloudTitle"))$("bookingCloudTitle").textContent=name==="upcoming"?"Upcoming — Bulan Depan & Seterusnya":"Completed / Guest History";renderV214BookingCards(name)}};window.v214ActivateTab=v214ActivateTab;
 const v216OriginalSendPaymentReminder=sendPaymentReminder;sendPaymentReminder=function(i){const d=bookingCache[i];if(!d)return;if(v216IsPlatform(d)){const dep=Number(d.securityDeposit??300),tx=Array.isArray(d.transactions)?d.transactions:[],depPaid=tx.filter(t=>String(t.type||"").toLowerCase()==="security deposit").reduce((s,t)=>s+Number(t.amount||0),0);if(depPaid>=dep){alert("Security Deposit sudah dibayar.");return;}const guest=d.guestName||d.guest||"Guest",msg=`Assalamualaikum / Hi ${guest},\n\nPeringatan Security Deposit untuk THE 5R VILLA.\n\nCheck-in: ${d.checkIn||"-"}\nCheck-out: ${d.checkOut||"-"}\nRental: Dibayar melalui ${d.platform||"platform"}\nSecurity Deposit: RM ${dep.toFixed(2)}\n\nSecurity Deposit diperlukan 1 hari sebelum check-in dan akan dipulangkan selepas pemeriksaan villa jika tiada kerosakan / kehilangan / pelanggaran house rules.\n\nSelepas transfer, sila hantar bukti bayaran melalui WhatsApp ini.\n\nTerima kasih.\nTHE 5R VILLA`;v216SendWA(d,msg);return}return v216OriginalSendPaymentReminder(i)};window.sendPaymentReminder=sendPaymentReminder;
 const v216OriginalViewReceipt=viewReceipt;viewReceipt=function(i){const d=bookingCache[i],tx=Array.isArray(d.transactions)?d.transactions:[],enriched=tx.map((t,idx)=>t.receiptNo?t:{...t,receiptNo:`${(d.bookingNo||"5RV-BKG").replace("BKG","RCP")}-${String(idx+1).padStart(2,"0")}`}),orig=d.transactions;d.transactions=enriched;v216OriginalViewReceipt(i);d.transactions=orig;const c=$("receiptContent"),hist=enriched.filter(t=>["Booking Payment","Payment","Security Deposit","Additional Cash","Damage Charge","Late Check-out","Cleaning Charge","Other"].includes(String(t.type||"")));if(c)c.insertAdjacentHTML("beforeend",`<h3 style="margin-top:16px">Individual Payment Receipts</h3><div class="receiptgrid">${hist.length?hist.map(t=>`<div><b>${esc(t.receiptNo||"-")}</b><br>${esc(t.date||"-")} • ${esc(t.type||"-")}<br>RM ${Number(t.amount||0).toFixed(2)} • ${esc(t.note||"-")}</div>`).join(""):"<div>-</div>"}</div>`)};window.viewReceipt=viewReceipt;
@@ -4343,12 +4390,12 @@ renderV214BookingCards=function(mode){
    let actions=v216IsPlatform(d)
     ?`${days<=1&&days>=0&&pi.label.includes("PENDING")?`<button class="green" onclick="sendPaymentReminder(${i})">WhatsApp</button>`:""}<button class="blue" onclick="openQuickPayment(${i})">Payment / SD</button><button class="gray" onclick="viewBooking(${i})">View</button>${v2163MoreMenu(i)}`
     :`${Number(d.balance||0)>0?`<button class="green" onclick="openBalanceReminder(${i})">WhatsApp</button>`:`<button class="green" onclick="sendCheckinWhatsApp(${i})">WhatsApp</button>`}<button class="blue" onclick="openQuickPayment(${i})">Payment</button><button class="gray" onclick="viewBooking(${i})">View</button>${v2163MoreMenu(i)}`;
-   return `<div class="v214-booking-card"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))}</div><div class="v214-booking-money"><b>${esc(v216DaysLabel(d.checkIn))}</b> • ${esc(pi.sub)}</div><div class="v216-receiptline">${v216ReceiptSummary(d)}</div><div class="v214-booking-actions">${actions}</div></div>`;
+   return `<div class="v214-booking-card"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="v214-booking-money"><b>${esc(v216DaysLabel(d.checkIn))}</b> • ${esc(pi.sub)}</div><div class="v216-receiptline">${v216ReceiptSummary(d)}</div><div class="v214-booking-actions">${actions}</div></div>`;
   }).join("")}`).join(""):'<div class="status ok">Tiada booking sepadan dengan carian / filter.</div>';
  }else if(mode==="completed"){
   items.sort((a,b)=>String(b.d.checkIn||"").localeCompare(String(a.d.checkIn||"")));
   const good=items.filter(x=>String(x.d.guestGrade||"green").toLowerCase()!=="red"),red=items.filter(x=>String(x.d.guestGrade||"").toLowerCase()==="red");
-  const card=({d,i},isRed=false)=>{const grade=String(d.guestGrade||"").toLowerCase();return `<div class="v214-booking-card completed ${isRed?"v216-red-card":"v216-green-card"}"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${isRed?"unpaid":"paid"}">${isRed?"RED GUEST":grade==="green"?"GREEN GUEST":"COMPLETED"}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))}</div>${isRed&&d.guestGradeNote?`<div class="v216-guest-note"><b>Note:</b> ${esc(d.guestGradeNote)}</div>`:""}<div class="v216-receipt-history">${v216ReceiptSummary(d)}</div><div class="v216-gradebar">${!isRed?`<button class="green" onclick="v216SetGrade(${i},'green')">✓ Green Guest</button><button class="red" onclick="v216SetGrade(${i},'red')">Red Guest</button><button class="green" onclick="v216SendPostStay(${i})">Thank You / Review</button><button class="blue" onclick="v216SendPromo(${i})">Send Promo WhatsApp</button>`:`<button class="green" onclick="v216SetGrade(${i},'green')">Move to Green</button>`}<button class="gray" onclick="viewBooking(${i})">View History</button>${v2163MoreMenu(i,{allowEdit:true,allowDelete:true,allowReceipt:true})}</div></div>`};
+  const card=({d,i},isRed=false)=>{const grade=String(d.guestGrade||"").toLowerCase();return `<div class="v214-booking-card completed ${isRed?"v216-red-card":"v216-green-card"}"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div><span class="v214-chip ${isRed?"unpaid":"paid"}">${isRed?"RED GUEST":grade==="green"?"GREEN GUEST":"COMPLETED"}</span></div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div>${isRed&&d.guestGradeNote?`<div class="v216-guest-note"><b>Note:</b> ${esc(d.guestGradeNote)}</div>`:""}<div class="v216-receipt-history">${v216ReceiptSummary(d)}</div><div class="v216-gradebar">${!isRed?`<button class="green" onclick="v216SetGrade(${i},'green')">✓ Green Guest</button><button class="red" onclick="v216SetGrade(${i},'red')">Red Guest</button><button class="green" onclick="v216SendPostStay(${i})">Thank You / Review</button><button class="blue" onclick="v216SendPromo(${i})">Send Promo WhatsApp</button>`:`<button class="green" onclick="v216SetGrade(${i},'green')">Move to Green</button>`}<button class="gray" onclick="viewBooking(${i})">View History</button>${v2163MoreMenu(i,{allowEdit:true,allowDelete:true,allowReceipt:true})}</div></div>`};
   holder.innerHTML=`<div><div class="v216-section-title"><h3>Completed / Green Guests</h3><span>Repeat guest / sesuai untuk promo</span></div>${good.length?good.map(x=>card(x,false)).join(""):'<div class="status ok">Tiada Green / Completed guest sepadan.</div>'}</div><div><div class="v216-section-title"><h3 style="color:#991b1b">Red Guests</h3><span>Asing terus • tidak masuk promo</span></div>${red.length?red.map(x=>card(x,true)).join(""):'<div class="status ok">Tiada Red Guest sepadan.</div>'}</div>`;
  }
  if($("count"))$("count").textContent=`${items.length} shown • ${base.length} total`;
@@ -4520,9 +4567,30 @@ function v217RefundInfo(d){
  const tx=Array.isArray(d?.transactions)?d.transactions:[];
  const txPaid=tx.filter(t=>String(t.type||"").toLowerCase()==="security deposit").reduce((s,t)=>s+Number(t.amount||0),0);
  const txRefund=tx.filter(t=>String(t.type||"").toLowerCase()==="refund").reduce((s,t)=>s+Number(t.amount||0),0);
- const paid=Math.max(txPaid,Number(d?.securityDepositReceived||0),Number(d?.securityDepositPaid||0));
- const refunded=Math.max(txRefund,Number(d?.securityDepositRefunded||0),Number(d?.totalRefund||0));
- const pending=Math.max(0,Math.min(dep,paid)-refunded);
+
+ // Central allocation is the source of truth.
+ // Example: SD 200 + Rental Payment 1600 against Rent 1500 + SD 300
+ // => RM100 excess rental completes SD, therefore SD received = RM300.
+ let allocatedSd=0,allocatedRefund=0;
+ try{
+  const m=typeof paymentMathFromBooking==="function"?paymentMathFromBooking(d,tx):null;
+  allocatedSd=Number(m?.securityDepositReceived||0);
+  allocatedRefund=Number(m?.securityDepositRefunded||0);
+ }catch(e){}
+
+ const paid=Math.min(dep,Math.max(
+  txPaid,
+  allocatedSd,
+  Number(d?.securityDepositReceived||0),
+  Number(d?.securityDepositPaid||0)
+ ));
+ const refunded=Math.max(
+  txRefund,
+  allocatedRefund,
+  Number(d?.securityDepositRefunded||0),
+  Number(d?.totalRefund||0)
+ );
+ const pending=Math.max(0,paid-refunded);
  const completed=!!d?.checkOutAt || String(d?.stayStatus||"").toLowerCase()==="checked-out" || String(d?.status||"").toLowerCase()==="completed";
  return {dep,paid,refunded,pending,completed};
 }
@@ -5305,7 +5373,7 @@ function v2177RenderActionNeeded(){
  box.innerHTML=items.length?items.map(x=>{
   const d=x.d,pi=v216PaymentInfo(d),st=x.st;
   const badge=["checkout_overdue","checkout_today","checkin_overdue","checkin_today","stay"].includes(st.key)?v2177StateChip(d):`<span class="v214-chip soon">${esc(v216DaysLabel(d.checkIn))}</span>`;
-  return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${badge}</div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions v2177-today-actions">${v2177PrimaryActions(d,x.i)}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;
+  return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${badge}</div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions v2177-today-actions">${v2177PrimaryActions(d,x.i)}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;
  }).join(""):'<div class="v60-mini">Tiada tindakan segera sekarang.</div>';
 }
 function v2177RenderStayMonitor(){
@@ -5323,9 +5391,8 @@ function v2177RenderStayMonitor(){
   if(["checkout_today","checkout_overdue"].includes(st.key))primary=`<button class="green" onclick="sendCheckoutWhatsApp(${x.i})">WhatsApp Check-out</button><button class="v64-statusbtn v64-checkout" onclick="markCheckOut(${x.i})">Check-out</button>`;
   else if(!d.checkInAt)primary=`<button class="green" onclick="sendCheckinWhatsApp(${x.i})">WhatsApp Check-in</button><button class="v64-statusbtn v64-checkin" onclick="markCheckIn(${x.i})">Check-in</button>`;
   else primary=`<button class="green" onclick="sendGuestBookingUpdate(${x.i})">WhatsApp Update</button>`;
-  return `<div class="v214-booking-card current"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${v2177StateChip(d)}</div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))}</div><div class="v214-booking-money"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="v216-actions v2177-today-actions">${primary}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;
+  return `<div class="v214-booking-card current"><div class="v214-booking-top"><div><div class="v214-booking-name">${esc(d.guestName||d.guest||"-")}</div><div class="v214-booking-meta">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${v2177StateChip(d)}</div><div class="v214-booking-date">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="v214-booking-money"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="v216-actions v2177-today-actions">${primary}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;
  }).join("")}</div>`);
- v2213ArrangeDashboardPriority();
 }
 
 // Safer Check-out: mark stay complete only. NO refund transaction is created here.
@@ -6033,7 +6100,7 @@ function v21715EnsureNextUpcoming(){
 function v21715RenderNextUpcoming(){
  const el=v21715EnsureNextUpcoming();if(!el)return;const today=localTodayISO();
  const items=bookingCache.map((d,i)=>({d,i})).filter(x=>!v21715IsCancelled(x.d)&&!v2177IsCheckedOut(x.d)&&x.d.checkIn&&x.d.checkIn>=today).sort((a,b)=>String(a.d.checkIn).localeCompare(String(b.d.checkIn))).slice(0,6);
- el.innerHTML=`<div class="head"><div><h3>Next Upcoming Guests</h3><div class="note">Semua future guest termasuk bulan semasa — nama tidak akan hilang dari Upcoming.</div></div><button class="gray" type="button" onclick="v214ActivateTab('upcoming')">Open Upcoming</button></div><div class="v21715-next-list">${items.length?items.map(x=>`<div class="v21715-next-row"><div><div class="v21715-next-name">${esc(x.d.guestName||x.d.guest||"Guest")}</div><div class="v21715-next-meta">${esc(x.d.platform||"-")} • ${esc(shortDate(x.d.checkIn))} → ${esc(shortDate(x.d.checkOut||""))} • ${esc(v216DaysLabel(x.d.checkIn))}</div>${v21715SdChip(x.d)}</div><div class="v21715-next-actions"><button class="gray" onclick="viewBooking(${x.i})">View</button><button class="green" onclick="sendGuestBookingUpdate(${x.i})">WhatsApp</button></div></div>`).join(""):'<div class="note">Tiada future booking.</div>'}</div>`;
+ el.innerHTML=`<div class="head"><div><h3>Next Upcoming Guests</h3><div class="note">Semua future guest termasuk bulan semasa — nama tidak akan hilang dari Upcoming.</div></div><button class="gray" type="button" onclick="v214ActivateTab('upcoming')">Open Upcoming</button></div><div class="v21715-next-list">${items.length?items.map(x=>`<div class="v21715-next-row"><div><div class="v21715-next-name">${esc(x.d.guestName||x.d.guest||"Guest")}</div><div class="v21715-next-meta">${esc(x.d.platform||"-")} • ${esc(shortDate(x.d.checkIn))} → ${esc(shortDate(x.d.checkOut||""))} ${v5rGuestNightsLabel(x.d)?`• ${v5rGuestNightsLabel(x.d)}`:""} • ${esc(v216DaysLabel(x.d.checkIn))}</div>${v21715SdChip(x.d)}</div><div class="v21715-next-actions"><button class="gray" onclick="viewBooking(${x.i})">View</button><button class="green" onclick="sendGuestBookingUpdate(${x.i})">WhatsApp</button></div></div>`).join(""):'<div class="note">Tiada future booking.</div>'}</div>`;
 }
 
 // ---------- SD collected detail ----------
@@ -6516,7 +6583,7 @@ v2177RenderActionNeeded=function(){
  }).sort((a,b)=>{const p={checkout_overdue:0,checkout_today:1,poststay:2,checkin_overdue:3,checkin_today:4,stay:5,upcoming:6,active:7};return (p[a.st.key]??9)-(p[b.st.key]??9)||String(a.d.checkIn||"").localeCompare(String(b.d.checkIn||""));});
  const sec=document.querySelector(".v61-action h3");if(sec)sec.textContent="Action Needed";
  const mini=document.querySelector(".v61-action .v60-mini");if(mini)mini.textContent="Check-in → Check-out = Completed.";
- box.innerHTML=items.length?items.map(x=>{const d=x.d,pi=v216PaymentInfo(d),st=x.st,badge=v2177StateChip(d);return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${badge}</div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions v2177-today-actions">${v2177PrimaryActions(d,x.i)}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;}).join(""):'<div class="v60-mini">Tiada tindakan lifecycle segera.</div>';
+ box.innerHTML=items.length?items.map(x=>{const d=x.d,pi=v216PaymentInfo(d),st=x.st,badge=v2177StateChip(d);return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${badge}</div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions v2177-today-actions">${v2177PrimaryActions(d,x.i)}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;}).join(""):'<div class="v60-mini">Tiada tindakan lifecycle segera.</div>';
 };
 
 v2177RenderTodayBoard=function(){
@@ -6659,14 +6726,45 @@ function v218CheckBookingWrite(ref,before,next){
   // Any append-only financial transaction (Payment / SD / Refund / charges)
   // is merged against the fresh Firestore snapshot. Editing/removing an existing
   // transaction still keeps the stale-cache conflict protection.
-  if(before&&info.cached&&JSON.stringify(info.cachedTx)!==JSON.stringify(oldTx)&&!info.appendOnly){
+  if(before&&info.cached&&!v223SameTx(info.cachedTx,oldTx)&&!info.appendOnly){
    throw Error('Booking berubah pada sesi lain. Refresh sebelum ubah bayaran.');
   }
 
   const p=V218.projectBookings([{id:ref.id,...next}]);
-  if(p.issues.some(x=>/exceeds deposit/.test(x.message)))
-   throw Error('Refund melebihi SD diterima.');
+  if(p.issues.some(x=>/exceeds deposit/.test(x.message))){
+   // V218 legacy classifier only sees transactions explicitly labelled Security Deposit.
+   // For Direct bookings, central math may legitimately allocate excess rental payment to SD.
+   let centralAllows=false;
+   try{
+    const m=typeof paymentMathFromBooking==="function"
+     ? paymentMathFromBooking(next,Array.isArray(next.transactions)?next.transactions:[])
+     : null;
+    const dep=Number(next?.securityDeposit ?? next?.deposit ?? 300);
+    const received=Math.min(dep,Number(m?.securityDepositReceived||next?.securityDepositReceived||0));
+    const refunded=Number(m?.securityDepositRefunded||next?.securityDepositRefunded||0);
+    centralAllows=received>0 && refunded<=received;
+   }catch(e){}
+   if(!centralAllows)throw Error('Refund melebihi SD diterima.');
+  }
  }
+}
+function v223Stable(value){
+ if(Array.isArray(value))return value.map(v223Stable);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,v223Stable(value[k])]));
+ return value;
+}
+function v223SameTx(a,b){return JSON.stringify(v223Stable(a||[]))===JSON.stringify(v223Stable(b||[]));}
+function v223PrepareEdit(data,before,base){
+ const out={...data};delete out.__v223EditBase;
+ if(!base)return out;
+ const baseline=base.transactions||[],server=before?.transactions||[],proposed=out.transactions||[];
+ if(v223SameTx(proposed,baseline))out.transactions=server;
+ else if(!v223SameTx(server,baseline))throw Error('Bayaran booking telah berubah selepas borang dibuka. Salin perubahan anda, Batal Edit, kemudian buka Edit semula untuk melihat bayaran terkini.');
+ if(typeof paymentMathFromBooking==='function'){
+  const m=paymentMathFromBooking({...before,...out},out.transactions);
+  Object.assign(out,{grossDue:m.due,totalIncoming:m.incoming,totalRefund:m.refunds,netPaid:m.netPaid,balance:m.balance,paymentStatus:m.status,securityDepositReceived:m.securityDepositReceived,securityDepositRefunded:m.securityDepositRefunded,securityDepositBalance:m.securityDepositBalance});
+ }
+ return out;
 }
 async function v218Atomic(ref,data,mode,options){
  const actor=v218Actor(),auditRef=doc(collection(db,'financialAudit'));
@@ -6675,6 +6773,9 @@ async function v218Atomic(ref,data,mode,options){
   if(mode==='update'&&!before)throw Error('Rekod tidak ditemui.');
   if(mode==='create'&&before)throw Error('Rekod telah wujud.');
 
+  const editBase=data?.__v223EditBase;
+  if(editBase&&editBase.id!==ref.id)throw Error("Borang edit tidak sepadan dengan booking.");
+  data=v223PrepareEdit(data,before,editBase);
   let writeData=data;
 
   // APPEND-ONLY FINANCIAL WRITE:
@@ -6773,18 +6874,273 @@ async function v218Load(){
   if(results[2].status==='fulfilled')v218Audits=results[2].value.docs.map(s=>({...s.data(),id:s.id}));
   v218Loaded=results.every(r=>r.status==='fulfilled');
   if(!v218Loaded)v218LoadError='Cashbook / Audit cloud read gagal. Semak peraturan akses; jumlah keseluruhan belum lengkap.';
- }catch(e){v218Loaded=false;v218LoadError=e.message||String(e);}finally{v218Busy=false;v218Render();}
+ }catch(e){v218Loaded=false;v218LoadError=e.message||String(e);}finally{v218Busy=false;v218Render();v222Render();}
 }
 function v218Data(){return V218.ledger(v218Bookings,v218Manual,V218.today());}
 function v218Month(){return $('v218Month')?.value||V218.today().slice(0,7);}
 function v218VillaFilter(){return $('v218Villa')?.value||'all';}
 function v218Metric(label,amount,sub=''){return `<div class="v218-metric"><span>${esc(label)}</span><strong>${esc(typeof amount==='number'?v218Money(amount):amount)}</strong><small>${esc(sub)}</small></div>`;}
+
+const V222_POLICY_START="2026-10-22";
+const V222_RENTAL_ACCOUNT="5R SOLUTION • MAYBANK";
+const V222_DEPOSIT_ACCOUNT="AKAUN DEPOSIT (ASINGAN)";
+const V222_LEGACY_ACCOUNT="REKOD LAMA / SEMAK AKAUN";
+
+function v222Date(x){return String(x||"").slice(0,10);}
+function v222Sen(x){return Math.round((Number(x)||0)*100);}
+function v222Rm(sen){return `RM ${(Number(sen||0)/100).toLocaleString("en-MY",{minimumFractionDigits:2,maximumFractionDigits:2})}`;}
+function v222AccountFor(date,type){
+ if(!date || date<V222_POLICY_START)return V222_LEGACY_ACCOUNT;
+ return type==="rental"?V222_RENTAL_ACCOUNT:V222_DEPOSIT_ACCOUNT;
+}
+function v222BookingRef(b){return b?.bookingNo||b?.id||"-";}
+function v222IsVoided(t){try{return V218.voided(t);}catch(e){return false;}}
+function v222DirectRows(b){
+ const rows=[];
+ const dep=Math.max(0,Number(b?.securityDeposit??b?.deposit??300));
+ const rent=Math.max(0,Number(b?.rent||0));
+ let rentRemain=rent,sdRemain=dep;
+ const tx=(Array.isArray(b?.transactions)?b.transactions:[])
+  .map((t,i)=>({...t,__i:i}))
+  .filter(t=>!v222IsVoided(t)&&v222Date(t.date))
+  .sort((a,b)=>v222Date(a.date).localeCompare(v222Date(b.date))||a.__i-b.__i);
+
+ function push(date,type,amount,note){
+  const sen=v222Sen(amount); if(sen<=0)return;
+  rows.push({
+   date,type,amountSen:sen,
+   account:v222AccountFor(date,type),
+   bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",
+   platform:b.platform||"Direct",note:note||""
+  });
+ }
+
+ for(const t of tx){
+  const date=v222Date(t.date),amount=Math.max(0,Number(t.amount||0)),typ=String(t.type||"");
+  if(!amount)continue;
+
+  if(typ==="Refund"){
+   push(date,"refund",amount,t.note||"Security Deposit Refund");
+   continue;
+  }
+
+  if(typ==="Booking Payment"||typ==="Security Deposit"){
+   const toSd=Math.min(amount,sdRemain);
+   if(toSd>0){push(date,"sd",toSd,t.note||typ);sdRemain-=toSd;}
+   const extra=Math.max(0,amount-toSd);
+   if(extra>0){
+    const toRent=Math.min(extra,rentRemain);
+    if(toRent>0){push(date,"rental",toRent,t.note||typ);rentRemain-=toRent;}
+   }
+   continue;
+  }
+
+  if(typ==="Payment"){
+   const toRent=Math.min(amount,rentRemain);
+   if(toRent>0){push(date,"rental",toRent,t.note||"Rental Payment");rentRemain-=toRent;}
+   let extra=Math.max(0,amount-toRent);
+   const toSd=Math.min(extra,sdRemain);
+   if(toSd>0){push(date,"sd",toSd,(t.note||"Rental Payment")+" • Auto allocate to SD");sdRemain-=toSd;extra-=toSd;}
+   continue;
+  }
+ }
+ return rows;
+}
+
+function v222PlatformDepositRows(b){
+ const rows=[];
+ for(const t of (Array.isArray(b?.transactions)?b.transactions:[])){
+  if(v222IsVoided(t))continue;
+  const date=v222Date(t.date),amount=Math.max(0,Number(t.amount||0)),typ=String(t.type||"");
+  if(!date||!amount)continue;
+  if(typ==="Refund"){
+   rows.push({date,type:"refund",amountSen:v222Sen(amount),account:v222AccountFor(date,"refund"),bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",platform:b.platform||"",note:t.note||"Security Deposit Refund"});
+  }else if(typ==="Security Deposit"||typ==="Booking Payment"){
+   rows.push({date,type:"sd",amountSen:v222Sen(amount),account:v222AccountFor(date,"sd"),bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",platform:b.platform||"",note:t.note||"Security Deposit"});
+  }
+ }
+ return rows;
+}
+
+
+function v222PlatformBookingNetPayRows(){
+ const manualBookingIds=new Set(
+  (v218Manual||[])
+   .filter(e=>e&&e.status!=="void"&&e.kind==="in"&&e.bookingId&&Number(e.amountSen||0)>0)
+   .map(e=>String(e.bookingId))
+ );
+ const rows=[];
+ for(const b of (v218Bookings||[])){
+  if(!b||b.isTrashed===true)continue;
+  const platform=String(b.platform||"Direct");
+  if(platform.toLowerCase()==="direct")continue;
+
+  const amount=Number(b.platformNetPayoutExpected||0);
+  const date=v222Date(b.platformPayoutDate||"");
+  if(!(amount>0)||!date)continue;
+
+  // Avoid double-counting when a real/manual payout cashbook entry already exists.
+  if(manualBookingIds.has(String(b.id)))continue;
+
+  rows.push({
+   date,
+   type:"rental",
+   amountSen:v222Sen(amount),
+   account:v222AccountFor(date,"rental"),
+   bookingNo:v222BookingRef(b),
+   guest:b.guestName||b.guest||"",
+   platform:platform,
+   note:"Platform Net Pay / Payout"
+  });
+ }
+ return rows;
+}
+
+function v222ManualRentalRows(){
+ const bookings=new Map((v218Bookings||[]).map(b=>[b.id,b]));
+ return (v218Manual||[]).filter(e=>e&&e.status!=="void"&&e.kind==="in"&&e.date&&Number(e.amountSen||0)>0)
+  .filter(e=>!["Security Deposit","Security Deposit Refund"].includes(String(e.category||"")))
+  .map(e=>{
+   const b=bookings.get(e.bookingId)||{};
+   return {
+    date:v222Date(e.date),type:"rental",amountSen:Number(e.amountSen||0),
+    account:v222AccountFor(v222Date(e.date),"rental"),
+    bookingNo:b.bookingNo||e.bookingId||"-",guest:b.guestName||b.guest||"",
+    platform:b.platform||e.category||"",note:e.note||e.reference||e.category||""
+   };
+  });
+}
+
+function v222Rows(){
+ const rows=[];
+ for(const b of (v218Bookings||[])){
+  if(!b||b.isTrashed===true)continue;
+  const p=String(b.platform||"Direct").toLowerCase();
+  if(p==="direct")rows.push(...v222DirectRows(b));
+  else rows.push(...v222PlatformDepositRows(b));
+ }
+ rows.push(...v222PlatformBookingNetPayRows());
+ rows.push(...v222ManualRentalRows());
+ return rows.sort((a,b)=>a.date.localeCompare(b.date)||String(a.bookingNo).localeCompare(String(b.bookingNo)));
+}
+function v222FilterRows(){
+ const y=$("v222Year")?.value||String(new Date().getFullYear());
+ const m=$("v222Month")?.value||"all";
+ return v222Rows().filter(r=>{
+  if(!r.date.startsWith(y+"-"))return false;
+  if(m!=="all"&&!r.date.startsWith(`${y}-${m}`))return false;
+  return true;
+ });
+}
+function v222TypeLabel(t){return t==="rental"?"Rental / Sewa":t==="sd"?"Security Deposit":"SD Refund";}
+function v222Pill(t){return `<span class="v222-pill ${t}">${esc(v222TypeLabel(t))}</span>`;}
+function v222RowHtml(r){
+ return `<tr><td>${esc(r.date)}</td><td>${esc(r.guest||"-")}</td><td>${esc(r.bookingNo||"-")}</td><td>${esc(r.platform||"-")}</td><td>${v222Pill(r.type)}</td><td>${esc(r.account)}</td><td class="amt">${v222Rm(r.amountSen)}</td><td>${esc(r.note||"")}</td></tr>`;
+}
+function v222ToggleSdPocket(){
+ const p=$("v222SdPocket");if(!p)return;
+ p.classList.toggle("open");
+ const b=$("v222SdPocketBtn");
+ if(b)b.querySelector("span:last-child").textContent=p.classList.contains("open")?"▲":"▼";
+}
+function v222Render(){
+ const host=$("v222PaymentReport"); if(!host)return;
+ const rows=v222FilterRows();
+
+ // MAIN REPORT = rental / platform net pay only
+ const rentalRows=rows.filter(r=>r.type==="rental" && r.account!==V222_LEGACY_ACCOUNT);
+ const legacyRental=rows.filter(r=>r.type==="rental" && r.account===V222_LEGACY_ACCOUNT);
+
+ // SD POCKET = separate, optional view
+ const depositIn=rows.filter(r=>r.type==="sd");
+ const depositOut=rows.filter(r=>r.type==="refund");
+
+ const sum=a=>a.reduce((s,r)=>s+Number(r.amountSen||0),0);
+ const rentSen=sum(rentalRows);
+ const sdInSen=sum(depositIn.filter(r=>r.account===V222_DEPOSIT_ACCOUNT));
+ const sdOutSen=sum(depositOut.filter(r=>r.account===V222_DEPOSIT_ACCOUNT));
+ const heldSen=Math.max(0,sdInSen-sdOutSen);
+
+ const mkAccount=(title,cls,arr,totalLabel,totalSen)=>{
+  return `<div class="v222-account ${cls||""}">
+   <div class="v222-account-head"><span>${esc(title)}</span><span>${esc(totalLabel)}: ${v222Rm(totalSen)}</span></div>
+   ${arr.length?`<div class="v222-table-wrap"><table class="v222-table"><thead><tr><th>Tarikh</th><th>Guest</th><th>Booking No</th><th>Platform</th><th>Jenis</th><th>Akaun</th><th>Amaun</th><th>Catatan</th></tr></thead><tbody>${arr.map(v222RowHtml).join("")}</tbody></table></div>`:`<div class="v222-empty">Tiada transaksi untuk pilihan ini.</div>`}
+  </div>`;
+ };
+
+ $("v222Summary").innerHTML=`
+  <div class="v222-card"><span>RENTAL / NET PAY → MAYBANK</span><strong>${v222Rm(rentSen)}</strong><small>${rentalRows.length} transaksi</small></div>
+  <div class="v222-card"><span>FOKUS LAPORAN</span><strong>5R MAYBANK</strong><small>SD diasingkan dalam pocket</small></div>`;
+
+ $("v222Accounts").innerHTML=
+  mkAccount(V222_RENTAL_ACCOUNT,"",rentalRows,"Rental / Net Pay Received",rentSen)+
+  (legacyRental.length?mkAccount(V222_LEGACY_ACCOUNT,"",legacyRental,"Rekod Lama Rental",sum(legacyRental)):"")+
+  `<div id="v222SdPocket" class="v222-pocket">
+    <button id="v222SdPocketBtn" type="button" class="v222-pocket-btn" onclick="v222ToggleSdPocket()">
+      <span>💰 SECURITY DEPOSIT POCKET — SD HELD ${v222Rm(heldSen)}</span>
+      <span>▼</span>
+    </button>
+    <div class="v222-pocket-body">
+      <div class="v222-summary">
+       <div class="v222-card"><span>SD MASUK</span><strong>${v222Rm(sdInSen)}</strong><small>${depositIn.length} transaksi</small></div>
+       <div class="v222-card"><span>SD REFUND</span><strong>${v222Rm(sdOutSen)}</strong><small>${depositOut.length} transaksi</small></div>
+       <div class="v222-card"><span>SD HELD</span><strong>${v222Rm(heldSen)}</strong><small>Masuk − Refund</small></div>
+      </div>
+      ${mkAccount(V222_DEPOSIT_ACCOUNT,"deposit",[...depositIn,...depositOut].sort((a,b)=>a.date.localeCompare(b.date)),"Net SD Movement",sdInSen-sdOutSen)}
+    </div>
+  </div>`;
+}
+function v222Print(){
+ const rows=v222FilterRows().filter(r=>r.type==="rental");
+ const y=$("v222Year")?.value||"",m=$("v222Month")?.value||"all";
+ const monthNames=["","Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
+ const period=m==="all"?`Tahun ${y}`:`${monthNames[Number(m)]} ${y}`;
+ const rent=rows.filter(r=>r.account===V222_RENTAL_ACCOUNT).reduce((s,r)=>s+Number(r.amountSen||0),0);
+ const html=`<!doctype html><html><head><meta charset="utf-8"><title>Laporan Bayaran ${period}</title><style>
+ body{font-family:Arial,sans-serif;color:#172033;padding:28px;font-size:12px}h1{margin:0;font-size:24px}h2{margin:5px 0 20px;color:#17365d}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:7px;border-bottom:1px solid #ddd;text-align:left}th{background:#f1f5f9}.r{text-align:right;font-weight:bold}.box{display:inline-block;vertical-align:top;border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin:6px 6px 6px 0;min-width:180px}.note{margin-top:18px;color:#64748b;font-size:10px;line-height:1.5}@media print{button{display:none}}
+ </style></head><body>
+ <h1>5R SOLUTION • THE 5R VILLA</h1><h2>LAPORAN RENTAL / NET PAY — ${esc(period)}</h2>
+ <div class="box"><b>Rental / Net Pay → Maybank</b><br><strong>${v222Rm(rent)}</strong></div>
+ <table><thead><tr><th>Tarikh</th><th>Guest</th><th>Booking</th><th>Platform</th><th>Jenis</th><th>Akaun</th><th>Amaun</th></tr></thead>
+ <tbody>${rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.guest||"-")}</td><td>${esc(r.bookingNo||"-")}</td><td>${esc(r.platform||"-")}</td><td>${esc(v222TypeLabel(r.type))}</td><td>${esc(r.account)}</td><td class="r">${v222Rm(r.amountSen)}</td></tr>`).join("")}</tbody></table>
+ <div class="note">Security Deposit tidak dimasukkan dalam laporan utama ini. SD dipantau secara berasingan melalui Security Deposit Pocket dalam Admin.</div>
+ <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
+ const w=window.open("","_blank","noopener,noreferrer");
+ if(!w){alert("Popup disekat. Benarkan popup untuk Save PDF.");return;}
+ w.document.open();w.document.write(html);w.document.close();
+}
+function v222Setup(){
+ if($("v222PaymentReport")||!$("v218CashbookPanel"))return;
+ const years=[];
+ const nowY=new Date().getFullYear();
+ for(let y=2024;y<=Math.max(2030,nowY+3);y++)years.push(y);
+ const months=["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
+ $("v218CashbookPanel").insertAdjacentHTML("afterbegin",`
+ <section id="v222PaymentReport" class="v222-report">
+  <div class="v222-head">
+   <div><h3>🏦 LAPORAN BAYARAN & AKAUN</h3><div class="v222-sub">Fokus laporan utama ialah Rental / Net Pay yang masuk ke 5R Maybank. Security Deposit diasingkan dalam pocket berasingan. Polisi baharu bermula <b>22/10/2026</b>.</div></div>
+  </div>
+  <div class="v222-controls">
+   <label>Tahun<select id="v222Year">${years.map(y=>`<option value="${y}" ${y===2026?"selected":""}>${y}</option>`).join("")}</select></label>
+   <label>Bulan<select id="v222Month"><option value="all">Semua Bulan</option>${months.map((n,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${i===9?"selected":""}>${n}</option>`).join("")}</select></label>
+   <button type="button" class="gray" onclick="v222Render()">Papar</button>
+   <button type="button" class="blue" onclick="v222Print()">SAVE PDF</button>
+  </div>
+  <div id="v222Summary" class="v222-summary"></div>
+  <div id="v222Accounts"></div>
+  <div class="v222-policy"><b>Auto akaun mulai 22/10/2026:</b> Rental/Sewa → <b>5R SOLUTION • MAYBANK</b>. Security Deposit & SD Refund → <b>AKAUN DEPOSIT (ASINGAN)</b>. Rekod sebelum tarikh ini kekal <b>Rekod Lama / Semak Akaun</b>.</div>
+ </section>`);
+ $("v222Year").onchange=v222Render;$("v222Month").onchange=v222Render;
+ v222Render();
+}
+Object.assign(window,{v222Render,v222Print,v222ToggleSdPocket});
+
 function v218Setup(){
  if($('v218CashbookPanel'))return;
  const nav=$('v214Nav'),dash=$('v214DashboardPanel');if(!nav||!dash)return;
  nav.insertAdjacentHTML('beforeend','<button type="button" class="v214-tab" data-v214-tab="cashbook">Cashbook</button>');
  nav.querySelector('[data-v214-tab="cashbook"]').onclick=()=>v214ActivateTab('cashbook');
- dash.insertAdjacentHTML('beforeend',`<section id="v218Owner" class="v218-owner"><div class="v218-eyebrow">THE 5R VILLA · OPERATIONS & FINANCE</div><div class="v218-hero"><div><span>SD HELD</span><strong id="v218Held">—</strong><p>Wang tetamu yang masih dipegang · bukan hasil atau untung</p></div><button type="button" class="gray" onclick="v218OpenSD()">Lihat pemegang SD</button></div><div id="v218OwnerGrid" class="v218-grid"></div><div id="v218OwnerNote" class="v218-note"></div></section>`);
+ dash.insertAdjacentHTML('afterbegin',`<section id="v218Owner" class="v218-owner"><div class="v218-eyebrow">THE 5R VILLA · OPERATIONS & FINANCE</div><div class="v218-hero"><div><span>SD HELD</span><strong id="v218Held">—</strong><p>Wang tetamu yang masih dipegang · bukan hasil atau untung</p></div><button type="button" class="gray" onclick="v218OpenSD()">Lihat pemegang SD</button></div><div id="v218OwnerGrid" class="v218-grid"></div><div id="v218OwnerNote" class="v218-note"></div></section>`);
  $('v214WaPanel').insertAdjacentHTML('afterend',`<section id="v218CashbookPanel" class="v214-panel hidden v218-scope"><div class="v218-heading"><div><div class="v218-eyebrow">FINANCE CONTROL CENTER</div><h2>Buku Tunai Premium</h2><p>Cash receipts, expenses and protected deposits</p></div><button type="button" class="blue" onclick="v218New()">+ Rekod tunai</button></div><div class="v218-controls"><label>Bulan<input id="v218Month" type="month" value="${V218.today().slice(0,7)}"></label><label>Villa<select id="v218Villa"><option value="all">Semua villa</option><option value="VILLA_1">Villa 1</option><option value="VILLA_2">Villa 2</option></select></label><button type="button" class="gray" onclick="v218Load()">Refresh cloud</button><button type="button" class="gray" onclick="v218Export()">Export Cashbook</button></div><div id="v218CloudStatus" class="v218-note"></div><h3>Today <small id="v218TodayLabel"></small></h3><div id="v218TodayGrid" class="v218-grid"></div><h3>Monthly</h3><div id="v218MonthlyGrid" class="v218-grid"></div><div class="v218-note">Income / Expense termasuk SD untuk aliran tunai. Revenue / Net Profit mengecualikan Security Deposit dan Refund. Laporan ini berdasarkan cash received, bukan hasil accrual atau untung selepas susut nilai/cukai.</div><h3>Villa Performance</h3><div id="v218Performance" class="v218-performance"></div><div class="v218-heading"><h3>Cashbook Entries</h3><select id="v218Status"><option value="posted">Posted cash</option><option value="expected">Expected booking — belum diterima</option><option value="review">Perlu semakan</option><option value="all">Semua</option></select></div><div id="v218Entries"></div><details class="v218-card"><summary>System Data Resolution · <span id="v218IssueCount">0</span> isu</summary><div id="v218Issues"></div><button class="gray" type="button" onclick="v214ActivateTab('dashboard')">Buka System Data Check sedia ada</button></details><details class="v218-card"><summary>Financial Audit Trail</summary><div id="v218Audit"></div></details></section>`);
  ['v218Month','v218Villa','v218Status'].forEach(id=>$(id).onchange=v218Render);
  document.body.insertAdjacentHTML('beforeend',`<div id="v218Modal" class="modal hidden"><div class="modalbox v218-scope"><div class="v218-heading"><h3 id="v218FormTitle">Rekod tunai</h3><button type="button" class="gray" onclick="v218Close()">Tutup</button></div><form id="v218Form"><div class="v218-formgrid"><label>Tarikh<input id="v218Date" type="date" required></label><label>Jenis<select id="v218Kind"><option value="in">Income</option><option value="out">Expense</option></select></label><label>Amaun RM<input id="v218Amount" type="number" min="0.01" step="0.01" required></label><label>Villa<select id="v218EntryVilla"><option value="VILLA_1">Villa 1</option><option value="VILLA_2">Villa 2</option></select></label><label>Kategori<select id="v218Category"></select></label><label>Booking (jika berkaitan)<select id="v218Booking"></select></label><label>Bank / payout reference<input id="v218Reference" maxlength="80"></label><label>Nota<textarea id="v218Note" required maxlength="2000"></textarea></label></div><div class="v218-note">SD/refund dikawal melalui booking. Bayaran Direct juga direkod dalam booking sahaja. Platform payout perlu bukti penerimaan sebenar dan reference unik.</div><div id="v218FormStatus" role="status"></div><button id="v218Save" type="submit" class="blue">Simpan rekod</button></form></div></div><div id="v218SDModal" class="modal hidden"><div class="modalbox v218-scope"><h3>SD Held · Protected Guest Money</h3><div id="v218SDRows"></div><button type="button" class="gray" onclick="document.getElementById('v218SDModal').classList.add('hidden')">Tutup</button></div></div>`);
@@ -6852,7 +7208,7 @@ function v218EnsureVillaField(){const form=$('bookingFormCard');if(!form||$('v21
 const v218BaseFormData=formData;formData=function(){return {...v218BaseFormData(),villaId:$('v218BookingVilla')?.value||'VILLA_1'};};
 const v218BaseEditBooking=editBooking;editBooking=function(i){v218BaseEditBooking(i);v218EnsureVillaField();if($('v218BookingVilla'))$('v218BookingVilla').value=V218.villa(bookingCache[i]||{});};window.editBooking=editBooking;
 const v218BaseClearForm=clearForm;clearForm=function(){v218BaseClearForm();if($('v218BookingVilla'))$('v218BookingVilla').value='VILLA_1';};
-const v218BaseTab=v214ActivateTab;v214ActivateTab=function(name){v218Setup();v218BaseTab(name);if(name==='cashbook'){$('v218CashbookPanel')?.classList.remove('hidden');v218Render();if(!v218Loaded)v218Load();}};window.v214ActivateTab=v214ActivateTab;
+const v218BaseTab=v214ActivateTab;v214ActivateTab=function(name){v218Setup();v222Setup();v218BaseTab(name);if(name==='cashbook'){$('v218CashbookPanel')?.classList.remove('hidden');v218Render();v222Render();if(!v218Loaded)v218Load();}};window.v214ActivateTab=v214ActivateTab;
 const v218BaseDashboard=updateDashboard;updateDashboard=function(){v218BaseDashboard();v218Render();};window.updateDashboard=updateDashboard;
 const v218BaseLoad=load;load=async function(){await v218BaseLoad();await v218Load();};
 // Reserve UI must not claim a save if the cloud/audit write failed.
@@ -6860,7 +7216,7 @@ v21711SaveReserve=async function(){const raw=$('v21711BankInput')?.value;try{if(
 v21711CurrentSdHeld=function(){return V218.projectBookings(v218Bookings.length?v218Bookings:bookingCache).positions.reduce((s,p)=>s+p.heldSen,0)/100;};
 Object.assign(window,{v218Load,v218New,v218OpenSD,v218Close,v218Export});
 onAuthStateChanged(auth,u=>{if(!u){v218Bookings=[];v218Manual=[];v218Audits=[];v218Loaded=false;v218LoadError='';['v218Modal','v218SDModal'].forEach(id=>$(id)?.classList.add('hidden'));v218Render();}});
-setTimeout(()=>{v218Setup();v218Render();if(auth.currentUser)v218Load();},1450);
+setTimeout(()=>{v218Setup();v222Setup();v218Render();v222Render();if(auth.currentUser)v218Load();},1450);
 window.THE5R_ADMIN_VERSION='V2.18.0_BOOKU_TUNAI_PREMIUM';
 
 
@@ -7647,6 +8003,22 @@ function v2189CheckinDays(d){
  const ci=String(d?.checkIn||"").slice(0,10);
  return ci ? daysFromToday(ci) : 99999;
 }
+
+function v2189Nights(d){
+ const ci=String(d?.checkIn||"").slice(0,10);
+ const co=String(d?.checkOut||"").slice(0,10);
+ if(!ci||!co)return 0;
+ const a=new Date(ci+"T00:00:00");
+ const b=new Date(co+"T00:00:00");
+ const n=Math.round((b-a)/86400000);
+ return Number.isFinite(n)&&n>0?n:0;
+}
+
+function v5rGuestNightsLabel(d){
+ const n=v2189Nights(d);
+ return n>0?`🌙 ${n} ${n===1?"NIGHT":"NIGHTS"}`:"";
+}
+
 function v2189AlertCard(d,i,type){
  const isIn=type==="checkin";
  const sentField=isIn?"checkinWaSentAt":"checkoutWaSentAt";
@@ -7656,12 +8028,29 @@ function v2189AlertCard(d,i,type){
  const title=isIn
   ? (days===0?"CHECK-IN HARI INI":days===1?"CHECK-IN ESOK":`CHECK-IN ${days} HARI LAGI`)
   : "CHECK-OUT HARI INI";
+ const countdown=isIn
+  ? (days===0?"HARI INI":days===1?"1 HARI LAGI":`${days} HARI LAGI`)
+  : "CHECK-OUT HARI INI";
+ const checkInDate=String(d.checkIn||"").slice(0,10);
+ const checkOutDate=String(d.checkOut||"").slice(0,10);
  const icon=isIn?"🔴":"🟠";
  const btn=isIn?"HANTAR CHECK-IN WHATSAPP":"HANTAR CHECK-OUT WHATSAPP";
  const fn=isIn?"v2189SendCheckin":"v2189SendCheckout";
  return `<div class="v2189-wa-card ${isIn?"checkin":"checkout"}">
    <div class="v2189-wa-top">
-    <div><div class="v2189-wa-who">${icon} ${esc(d.guestName||d.guest||"Guest")} — ${title}</div><div class="v2189-wa-meta">${v2189BookingMeta(d)}</div></div>
+    <div>
+     <div class="v2189-wa-who">${icon} ${esc(d.guestName||d.guest||"Guest")} — ${title}</div>
+     <div class="v2189-wa-meta">${v2189BookingMeta(d)}</div>
+     <div class="v2189-wa-meta" style="margin-top:7px;font-weight:800;color:#334155">
+      📅 Check-in: ${esc(checkInDate||"-")} &nbsp;→&nbsp; Check-out: ${esc(checkOutDate||"-")}
+     </div>
+     <div class="v2189-wa-meta" style="margin-top:4px;font-weight:900;color:#1e3a8a">
+      🌙 ${v2189Nights(d)} ${v2189Nights(d)===1?"NIGHT":"NIGHTS"}
+     </div>
+     <div class="v2189-wa-meta" style="margin-top:4px;font-weight:950;color:${isIn?"#b91c1c":"#9a3412"}">
+      ⏳ ${esc(countdown)}
+     </div>
+    </div>
     <span class="v2189-wa-state">${title}</span>
    </div>
    <div class="v2189-wa-actions">
@@ -7693,11 +8082,7 @@ function v2189RenderWaAlerts(){
  // Keep WhatsApp alerts at the very top of Dashboard.
  if(dashboard.firstElementChild!==wrap) dashboard.insertBefore(wrap,dashboard.firstChild);
  wrap.innerHTML=`<div class="v2189-wa-title">WhatsApp Alert</div>${html||'<div class="v2189-wa-empty">Tiada WhatsApp Check-in / Check-out yang perlu dihantar sekarang.</div>'}`;
-
- // Final requested priority:
- // WhatsApp Alert → Current Stay / Checkout Monitor → Action Needed.
- // Nodes may originate inside #v60Dashboard, so move them across parent safely.
- v2213ArrangeDashboardPriority();
+ v2211d2PlaceActionBelowWhatsApp();
 }
 async function v2189RecordWaSent(i,type){
  const d=bookingCache[i];if(!d?.id)return;
@@ -8235,7 +8620,8 @@ v2177RenderActionNeeded=function(){
  const mini=document.querySelector(".v61-action .v60-mini");if(mini)mini.textContent="Hanya operasi guest dalam ±14 hari. Future guest lain kekal di Upcoming.";
  box.innerHTML=items.length?items.map(x=>{
   const d=x.d,pi=v216PaymentInfo(d),st=x.st,badge=v2177StateChip(d);
-  return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${badge}</div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions v2177-today-actions">${v2177PrimaryActions(d,x.i)}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;
+  const countdown=v216DaysLabel(d.checkIn);
+  return `<div class="v214-dashboard-action"><div class="v214-booking-top"><div><div class="who">${esc(d.guestName||d.guest||"-")}</div><div class="sub">${esc(d.platform||"-")} • ${esc(d.phone||"-")}</div></div>${badge}</div><div class="when">${esc(shortDate(d.checkIn))} → ${esc(shortDate(d.checkOut||""))} ${v5rGuestNightsLabel(d)?`• ${v5rGuestNightsLabel(d)}`:""}</div><div class="sub" style="margin-top:4px;font-weight:900;color:#9a3412">⏳ ${esc(countdown)}</div><div class="sub"><span class="v214-chip ${pi.cls}">${esc(pi.label)}</span> • ${esc(pi.sub)}</div><div class="actions v2177-today-actions">${v2177PrimaryActions(d,x.i)}<button class="gray" onclick="viewBooking(${x.i})">View</button>${v2163MoreMenu(x.i)}</div></div>`;
  }).join(""):'<div class="v60-mini">Tiada tindakan guest dalam tempoh 14 hari.</div>';
  if(typeof v2189RenderWaAlerts==="function")v2189RenderWaAlerts();
 };
@@ -9062,6 +9448,21 @@ function v5rReceiptNo(prefix,bookingNo,receiptNo){
  const base=receiptNo || String(bookingNo||"5RV").replace("5RV-BKG-","5RV-RCP-") || "5RV-RCP";
  return `${base}-${prefix}`;
 }
+function v224Settlement(d){
+ const tx=Array.isArray(d?.transactions)?d.transactions:[];
+ const m=v2213AuthoritativeDirectAllocation(d,tx),r=v217RefundInfo(d);
+ const direct=String(d?.platform||'Direct').toLowerCase()==='direct';
+ const rentalDue=Math.max(0,Number(m.rentalOtherDue||0));
+ const incoming=Math.max(0,Number(m.incoming||0));
+ const sdReceived=Math.max(0,Number(r.paid||0)),sdRefunded=Math.max(0,Number(r.refunded||0));
+ const rentalReceived=direct?Math.max(0,incoming-sdReceived):Math.max(0,Number(m.rentalOtherPaid||0));
+ return {direct,rent:direct?Math.max(0,Number(d.rent||0)):0,rentalDue,rentalReceived,rentalBalance:Math.max(0,rentalDue-rentalReceived),incoming,sdRequired:Math.max(0,Number(r.dep||0)),sdReceived,sdRefunded,sdHeld:Math.max(0,sdReceived-sdRefunded),sdOutstanding:Math.max(0,Number(r.dep||0)-sdReceived),netRetained:Math.max(0,incoming-sdRefunded)};
+}
+function v224Summary(x){
+ const a=x.settlement;if(!a)return '';
+ const row=(label,value)=>`<tr><td>${label}</td><td>RM ${v5rMoney(value)}</td></tr>`;
+ return `<table class="v5r-r-total" style="page-break-inside:avoid"><tr><td colspan="2"><b>PECAHAN SEWA DAN SECURITY DEPOSIT (SD)</b></td></tr>${row('Harga sewa villa',a.rent)}${row('Jumlah sewa dan caj penginapan',a.rentalDue)}${row('Bayaran sewa / caj diterima',a.rentalReceived)}${row('Baki sewa / caj belum dibayar',a.rentalBalance)}${row('SD ditetapkan',a.sdRequired)}${row('SD telah diterima',a.sdReceived)}${row('SD telah dipulangkan',a.sdRefunded)}${row('Baki SD masih dipegang',a.sdHeld)}${row('SD belum diterima',a.sdOutstanding)}${row('Jumlah wang masuk asal (termasuk SD)',a.incoming)}${row('Tolak: SD dipulangkan',a.sdRefunded)}${row('<b>Wang bersih selepas pulangan SD</b>',a.netRetained)}</table><p style="font-size:11px">${a.sdRefunded>0?'SD dipulangkan mengikut rekod bayaran. Pulangan SD bukan baki sewa tertunggak.':'SD ditunjukkan berasingan daripada bayaran sewa.'}${!a.direct?' Sewa melalui platform tidak diakui sebagai bayaran tetamu dalam rekod SD ini.':''}</p>`;
+}
 function v5rReceiptHtml(x){
  const receiptNo=String(x.receiptNo||"").trim() || "DRAFT";
  const receiptDate=String(x.date||"").trim() || localTodayISO();
@@ -9097,11 +9498,7 @@ function v5rReceiptHtml(x){
   <table class="v5r-r-table"><thead><tr><th>Description</th><th>Amount (RM)</th></tr></thead>
    <tbody>${x.items.map(it=>`<tr><td><b>${esc(it.label)}</b>${it.sub?`<br><span style="font-size:10px;color:#64748b">${esc(it.sub)}</span>`:""}</td><td><b>RM ${v5rMoney(it.amount)}</b></td></tr>`).join("")}</tbody>
   </table>
-  <table class="v5r-r-total">
-   <tr><td>Subtotal</td><td>RM ${v5rMoney(x.subtotal!=null?x.subtotal:x.amount)}</td></tr>
-   <tr><td>Total Received</td><td>RM ${v5rMoney(x.amount)}</td></tr>
-   ${x.balance!=null?`<tr><td>Balance Due</td><td>RM ${v5rMoney(x.balance)}</td></tr>`:""}
-  </table>
+  ${x.settlement?v224Summary(x):`<table class="v5r-r-total"><tr><td>Jumlah bayaran diterima</td><td>RM ${v5rMoney(x.amount)}</td></tr>${x.balance!=null?`<tr><td>Baki belum dibayar</td><td>RM ${v5rMoney(x.balance)}</td></tr>`:''}</table>`}
   <div class="v5r-r-terms">
    <h3>📄 TERMS & CONDITIONS</h3>
    <ul>
@@ -9147,26 +9544,14 @@ function v5rOpenTandaReceiptFromBooking(i){
   note:"Bayaran tanda jadi diterima. Resit ini dijana daripada transaksi booking sedia ada."
  });
 }
-function v5rOpenFullReceiptFromBooking(i){
- const d=bookingCache[i];if(!v5rBookingFullPaid(d)){alert("Booking ini belum selesai bayaran penuh.");return;}
- const tx=Array.isArray(d.transactions)?d.transactions:[];
- const m=typeof v21710MathCore==="function"?v21710MathCore(d,tx):paymentMathFromBooking(d,tx);
- const dep=Number(d.securityDeposit??d.deposit??300);
- const rental=Number(m.rentalOtherDue||0);
- const total=Number(m.due||rental+dep);
- const lastDate=tx.filter(t=>Number(t.amount||0)>0).map(t=>t.date||"").sort().pop()||localTodayISO();
- v5rOpenReceipt({
-  title:"RESIT BAYARAN PENUH",receiptNo:v5rReceiptNo("FULL",d.bookingNo,d.receiptNo),
-  date:lastDate,platform:d.platform||"Direct",guestName:d.guestName||d.guest||"-",phone:d.phone||"-",
-  checkIn:d.checkIn||"",checkOut:d.checkOut||"",bookingNo:d.bookingNo||"-",
-  amount:total,amountLabel:"TOTAL FULL PAYMENT",
-  items:[
-   {label:"Villa Rental / Accommodation",sub:`THE 5R VILLA • ${v5rDateDisplay(d.checkIn)} hingga ${v5rDateDisplay(d.checkOut)}`,amount:rental},
-   {label:"Security Deposit",sub:"Refundable subject to clearance post check-out",amount:dep}
-  ],
-  subtotal:total,balance:0,note:"Payment Reference: Full settlement for THE 5R VILLA. Security Deposit remains subject to check-out inspection before refund."
- });
+function v224OpenSettlementReceipt(i,full){
+ const d=bookingCache[i];if(!d)return;
+ const a=v224Settlement(d);
+ if(full&&(a.rentalBalance>0||a.sdOutstanding>0)){alert('Bayaran penuh belum lengkap. Semak baki sewa dan SD.');return;}
+ const dates=(d.transactions||[]).filter(t=>Number(t.amount||0)>0&&!t.voided).map(t=>t.date||'').filter(Boolean).sort();
+ v5rOpenReceipt({title:full?'RESIT BAYARAN PENUH':'RESIT BAYARAN PENGINAPAN',receiptNo:v5rReceiptNo(full?'FULL':'PAY',d.bookingNo,d.receiptNo),date:dates.pop()||localTodayISO(),platform:d.platform||'Direct',guestName:d.guestName||d.guest||'-',phone:d.phone||'-',checkIn:d.checkIn||'',checkOut:d.checkOut||'',bookingNo:d.bookingNo||'-',amount:a.rentalReceived,amountLabel:'BAYARAN SEWA / CAJ DITERIMA (TANPA SD)',items:[{label:'Sewa dan caj penginapan',sub:a.direct?'Harga sewa villa dan caj berkaitan':'Sewa melalui platform; resit ini memaparkan bayaran yang direkod dalam Admin sahaja',amount:a.rentalDue},{label:'Security Deposit (SD) - berasingan',sub:'Lihat pecahan diterima, dipulangkan dan masih dipegang di bawah',amount:a.sdRequired}],subtotal:a.rentalDue,balance:a.rentalBalance,settlement:a,note:'Resit berdasarkan rekod semasa. Bayaran sewa dan pergerakan SD dipaparkan berasingan.'});
 }
+function v5rOpenFullReceiptFromBooking(i){v224OpenSettlementReceipt(i,true);}
 async function v5rEnsurePdf(){
  if(window.html2pdf)return;
  await new Promise((resolve,reject)=>{
@@ -9229,34 +9614,7 @@ THE 5R VILLA`;
  }catch(e){if(e?.name!=="AbortError")alert("Share PDF gagal: "+(e?.message||e));}
 }
 
-function v5rOpenBookingReceipt(i){
- const d=bookingCache[i];if(!d)return;
- const tx=Array.isArray(d.transactions)?d.transactions:[];
- const m=typeof v21710MathCore==="function"?v21710MathCore(d,tx):paymentMathFromBooking(d,tx);
- const isDirect=String(d.platform||"Direct").toLowerCase()==="direct";
- const rent=Number(d.rent||0);
- const deposit=Number(d.securityDeposit??d.deposit??300);
- const incoming=Number(m.incoming||0);
- const totalDue=Number(m.due||((isDirect?rent:0)+deposit));
- const balance=Number(m.balance||0);
- const receiptNo=String(d.receiptNo||"").trim() || String(d.bookingNo||"5RV").replace("5RV-BKG-","5RV-RCP-") || "DRAFT";
- const paidDates=tx.filter(t=>Number(t.amount||0)>0&&String(t.type||"")!=="Refund").map(t=>String(t.date||"")).filter(Boolean).sort();
- const receiptDate=paidDates.length?paidDates[paidDates.length-1]:localTodayISO();
- const items=[];
- if(isDirect && rent>0)items.push({label:"Villa Rental / Accommodation",sub:`THE 5R VILLA • ${v5rDateDisplay(d.checkIn)} hingga ${v5rDateDisplay(d.checkOut)}`,amount:rent});
- if(deposit>0)items.push({label:"Security Deposit",sub:"Refundable subject to clearance post check-out",amount:deposit});
- if(!items.length)items.push({label:"Booking / Payment",amount:totalDue});
- v5rOpenReceipt({
-  title:"BOOKING & PAYMENT RECEIPT",
-  receiptNo,date:receiptDate,platform:String(d.platform||"Direct").trim()||"Direct",
-  guestName:d.guestName||d.guest||"-",phone:d.phone||"-",
-  checkIn:d.checkIn||"",checkOut:d.checkOut||"",bookingNo:d.bookingNo||"-",
-  amount:incoming,amountLabel:"TOTAL RECEIVED",
-  items,subtotal:totalDue,balance,
-  note:"Payment Reference: Booking / accommodation at THE 5R VILLA. Generated automatically from current Admin payment records."
- });
-}
-
+function v5rOpenBookingReceipt(i){v224OpenSettlementReceipt(i,false);}
 
 function v5rInvoiceNo(d){
  const b=String(d?.bookingNo||"").trim();
@@ -9272,40 +9630,8 @@ function v5rInvoiceDueDate(d){
  return String(d?.paymentDueDate||d?.checkIn||localTodayISO()).slice(0,10);
 }
 function v5rInvoiceData(d){
- const tx=Array.isArray(d?.transactions)?d.transactions:[];
- const m=typeof v21710MathCore==="function"?v21710MathCore(d,tx):paymentMathFromBooking(d,tx);
- const isDirect=String(d?.platform||"Direct").toLowerCase()==="direct";
- const rent=Number(d?.rent||0);
- const deposit=Number(d?.securityDeposit??d?.deposit??300);
- const rentalDue=isDirect?rent:Number(m?.rentalOtherDue||0);
- const subtotal=Number(m?.due||rentalDue+deposit);
- const paid=Number(m?.incoming||0);
- const balance=Math.max(0,Number(m?.balance||subtotal-paid));
- const items=[];
- if(rentalDue>0)items.push({
-  label:"Villa Rental / Accommodation",
-  sub:`THE 5R VILLA • ${v5rDateDisplay(d?.checkIn)} hingga ${v5rDateDisplay(d?.checkOut)}`,
-  amount:rentalDue
- });
- if(deposit>0)items.push({
-  label:"Security Deposit",
-  sub:"Refundable subject to clearance post check-out",
-  amount:deposit
- });
- if(!items.length)items.push({label:"Booking / Accommodation",amount:subtotal});
- return {
-  invoiceNo:v5rInvoiceNo(d),
-  invoiceDate:v5rInvoiceDate(d),
-  dueDate:v5rInvoiceDueDate(d),
-  guestName:d?.guestName||d?.guest||"-",
-  phone:d?.phone||"-",
-  platform:String(d?.platform||"Direct").trim()||"Direct",
-  bookingNo:d?.bookingNo||"-",
-  checkIn:d?.checkIn||"",
-  checkOut:d?.checkOut||"",
-  items,subtotal,paid,balance,
-  status:balance<=0?"PAID":"OUTSTANDING"
- };
+ const a=v224Settlement(d);
+ return {invoiceNo:v5rInvoiceNo(d),invoiceDate:v5rInvoiceDate(d),dueDate:v5rInvoiceDueDate(d),guestName:d?.guestName||d?.guest||'-',phone:d?.phone||'-',platform:d?.platform||'Direct',bookingNo:d?.bookingNo||'-',checkIn:d?.checkIn||'',checkOut:d?.checkOut||'',items:[{label:'Sewa dan caj penginapan',sub:a.direct?'Sewa villa dan caj berkaitan':'Bayaran penginapan melalui platform; rujuk invois platform',amount:a.rentalDue},{label:'Security Deposit (SD) - berasingan',sub:'Deposit boleh dipulangkan; lihat status di bawah',amount:a.sdRequired}],subtotal:a.rentalDue,paid:a.rentalReceived,balance:a.rentalBalance,settlement:a,status:a.rentalBalance<=0&&a.sdOutstanding<=0?'PAID':'OUTSTANDING'};
 }
 function v5rInvoiceHtml(x){
  return `<div id="v5rReceiptDoc">
@@ -9337,7 +9663,7 @@ function v5rInvoiceHtml(x){
     <div class="v5r-r-row"><b>Check-out</b><span>:</span><span>${esc(v5rDateDisplay(x.checkOut))}</span></div>
    </div>
    <div class="v5r-r-amount">
-    <div class="label">BALANCE DUE</div>
+    <div class="label">BAKI SEWA / CAJ BELUM DIBAYAR (TANPA SD)</div>
     <div class="value">RM ${v5rMoney(x.balance)}</div>
    </div>
   </div>
@@ -9347,11 +9673,7 @@ function v5rInvoiceHtml(x){
    <tbody>${x.items.map(it=>`<tr><td><b>${esc(it.label)}</b>${it.sub?`<br><span style="font-size:10px;color:#64748b">${esc(it.sub)}</span>`:""}</td><td><b>RM ${v5rMoney(it.amount)}</b></td></tr>`).join("")}</tbody>
   </table>
 
-  <table class="v5r-inv-summary">
-   <tr><td>Subtotal</td><td>RM ${v5rMoney(x.subtotal)}</td></tr>
-   <tr><td>Paid to Date</td><td>RM ${v5rMoney(x.paid)}</td></tr>
-   <tr class="total"><td>Balance Due</td><td>RM ${v5rMoney(x.balance)}</td></tr>
-  </table>
+  ${v224Summary(x)}
 
   <div class="v5r-r-terms">
    <h3>📄 TERMS & CONDITIONS</h3>
@@ -9394,12 +9716,16 @@ Object.assign(window,{
  v5rOpenTandaReceiptFromRequest,v5rOpenTandaReceiptFromBooking,v5rOpenFullReceiptFromBooking,v5rOpenBookingReceipt,v5rOpenInvoiceFromBooking,
  v5rCloseReceipt,v5rDownloadReceiptPdf,v5rShareReceiptWhatsApp
 });
+window.THE5R_DOCUMENT_SD_VERSION="V2.22.4_RENTAL_SD_SEPARATE";
+window.THE5R_EDIT_FIX_VERSION="V2.22.3_EDIT_METADATA_PRESERVED";
 window.THE5R_SAFE_RECEIPT_VERSION="SAFE_RECEIPTS_FROM_6MONTH_ERROR_SCOPE_FIX";
 window.THE5R_PAYMENT_APPEND_FIX_VERSION="V2.20.7_PAYMENT_APPEND_AND_LOGO_FIX";
 window.THE5R_RECEIPT_DETAIL_FIX_VERSION="V2.20.8_RECEIPT_DETAILS_AND_BALANCE_FIX";
 window.THE5R_RECEIPT_META_FIX_VERSION="V2.20.9_META_VISIBLE";
 window.THE5R_INVOICE_VERSION="V2.21.0_BRANDED_INVOICE";
-window.THE5R_DASHBOARD_ORDER_VERSION="V2.21.3_CROSS_PARENT_PRIORITY_FIX";
+window.THE5R_WA_ALERT_DETAIL_VERSION="V2.21.1B_DATE_IN_OUT_NIGHTS_COUNTDOWN";
+window.THE5R_ALL_GUEST_NIGHTS_VERSION="V2.21.1C_ALL_GUEST_NIGHTS";
+window.THE5R_ACTION_ORDER_VERSION="V2.21.1D2_ACTION_UNDER_WA_AIRBNB_AFTER_ACTION";
 
 window.THE5R_ADMIN_VERSION="V2.18.9_ALERT_ONE_CLICK_WHATSAPP";
 
@@ -9616,7 +9942,15 @@ function v2192EnsureStyle(){
  .v2192-item.new{border-color:#86efac;background:#f0fdf4}.v2192-item.removed{border-color:#fca5a5;background:#fff7f7}
  .v2192-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}.v2192-who{font-size:12px;font-weight:950}.v2192-meta{font-size:10px;color:#64748b;margin-top:3px;line-height:1.45}
  .v2192-actions{display:flex;gap:6px;flex-wrap:wrap}.v2192-actions button{border:0;border-radius:9px;padding:8px 10px;font-size:10px;font-weight:900;cursor:pointer}.v2192-use{background:#173b62;color:#fff}.v2192-done{background:#e2e8f0;color:#334155}
- @media(max-width:650px){.v2192-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.v2192-sync{width:100%}}
+ .v2192-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+ .v2192-toggle{border:0;border-radius:10px;padding:10px 12px;background:#475569;color:#fff;font-weight:900;cursor:pointer}
+ .v2192-quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+ .v2192-quick span{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:6px 9px;background:#fff;border:1px solid #dbeafe;font-size:10px;font-weight:850;color:#334155}
+ .v2192-body{margin-top:10px}
+ .v2192-body.collapsed{display:none}
+ .v2192-scroll{max-height:420px;overflow:auto;padding-right:4px;overscroll-behavior:contain}
+ .v2192-scroll::-webkit-scrollbar{width:8px}.v2192-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px}
+ @media(max-width:650px){.v2192-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.v2192-sync,.v2192-toggle{width:100%}.v2192-scroll{max-height:360px}}
  `;
  document.head.appendChild(s);
 }
@@ -9628,36 +9962,65 @@ function v2192EnsurePanel(){
   p=document.createElement("div");
   p.id="v2192AirbnbMonitor";
  }
- // Keep Airbnb Booking Monitor at the bottom area.
- // If SD HELD exists, place Airbnb immediately before SD HELD.
- const sd=$("v218Owner");
- if(sd&&sd.parentElement===dash){
-  if(p.parentElement!==dash || p.nextElementSibling!==sd)dash.insertBefore(p,sd);
- }else if(p.parentElement!==dash || dash.lastElementChild!==p){
-  dash.appendChild(p);
+ // Keep Action Needed directly below WhatsApp Alert.
+ // Airbnb Monitor must sit AFTER Action Needed, not between WhatsApp and Action Needed.
+ const action=v2211d2PlaceActionBelowWhatsApp();
+ const wa=$("v2189WaAlerts");
+ if(action&&action.parentElement===dash){
+  if(action.nextElementSibling!==p)action.insertAdjacentElement("afterend",p);
+ }else if(wa&&wa.parentElement===dash){
+  if(wa.nextElementSibling!==p)wa.insertAdjacentElement("afterend",p);
+ }else if(p.parentElement!==dash){
+  dash.insertBefore(p,dash.firstChild);
  }
  return p;
 }
+
+let v2192MonitorExpanded=false;
+function v2192ToggleMonitor(){
+ v2192MonitorExpanded=!v2192MonitorExpanded;
+ v2192RenderMonitor();
+}
+
 function v2192RenderMonitor(){
  const p=v2192EnsurePanel(); if(!p)return;
  const months=v2192Monthly(),changes=v2192OpenChanges();
  const nNew=changes.filter(x=>x.type==="NEW").length;
  const nRemoved=changes.filter(x=>x.type==="REMOVED").length;
- const eventCount=v2192CurrentEvents().length;
+ const nError=months.reduce((s,x)=>s+Number(x.needCheck||0),0);
+ const stateText=v2192MonitorExpanded?"TUTUP DETAIL":"BUKA DETAIL";
+
  p.innerHTML=`
   <div class="v2192-head">
    <div>
     <div class="v2192-title">🏠 AIRBNB BOOKING MONITOR</div>
-    <div class="v2192-note">Jumlah iCal ikut bulan + kesan booking baru / block hilang. Nama & detail guest masih dimasukkan sendiri dari Airbnb.</div>
+    <div class="v2192-note">Ringkasan iCal Airbnb. Tekan BUKA DETAIL hanya bila mahu semak bulan / booking baru / cancel.</div>
    </div>
-   <button type="button" class="v2192-sync" onclick="v2192SyncAndCheck()">↻ SYNC & CHECK AIRBNB</button>
+   <div class="v2192-toolbar">
+    <button type="button" class="v2192-sync" onclick="v2192SyncAndCheck()">↻ SYNC & CHECK AIRBNB</button>
+    <button type="button" class="v2192-toggle" onclick="v2192ToggleMonitor()">${stateText}</button>
+   </div>
   </div>
-  <div class="v2192-grid">
-   ${months.map(x=>`<div class="v2192-month ${x.needCheck>0?"v2195-month-error":""}" ${x.needCheck>0?`onclick="v2195OpenMonthIssues('${x.key}')"`:""}><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">ABNB ${x.ical} • ADMIN/Direct ${x.admin}</div>${x.needCheck>0?`<span class="err">⚠ ERROR • ${x.needCheck} NEED TO CHECK • TEKAN</span>`:`<span class="ok">✓ TALLY</span>`}</div>`).join("")}
+
+  <div class="v2192-quick">
+   <span>📅 ${months.length} BULAN</span>
+   <span>🟢 NEW ${nNew}</span>
+   <span>🔴 REMOVED ${nRemoved}</span>
+   <span>${nError>0?`⚠️ ERROR ${nError}`:"✅ TALLY"}</span>
   </div>
-  <div class="v2192-summary">Bulan lepas disembunyikan • Error dikira automatik ikut range Check-in → Check-out. Bila data sudah tally selepas Sync, error hilang sendiri.</div>
-  <div class="v2192-list">
-   ${changes.length?changes.slice(0,12).map(x=>`<div class="v2192-item ${x.type==="NEW"?"new":"removed"}"><div class="v2192-row"><div><div class="v2192-who">${x.type==="NEW"?"🟢 NEW AIRBNB BOOKING":"🔴 AIRBNB BLOCK REMOVED — SEMAK CANCEL"}</div><div class="v2192-meta">${v2192Esc(x.checkIn)} → ${v2192Esc(x.checkOut)}<br>${x.type==="NEW"?"Semak nama guest di Airbnb kemudian isi detail Admin.":"Semak Airbnb dahulu. Admin tidak auto-cancel."}</div></div><div class="v2192-actions"><button class="v2192-use" onclick="v2192UseDates('${v2192Esc(x.checkIn)}','${v2192Esc(x.checkOut)}')">${x.type==="NEW"?"GUNA TARIKH":"SEMAK TARIKH"}</button><button class="v2192-done" onclick="v2192Resolve('${v2192Esc(x.key)}')">SUDAH SEMAK</button></div></div></div>`).join(""):'<div class="v2192-note">Tiada perubahan Airbnb baharu sejak perbandingan terakhir.</div>'}
+
+  <div class="v2192-body ${v2192MonitorExpanded?"":"collapsed"}">
+   <div class="v2192-scroll">
+    <div class="v2192-grid">
+     ${months.map(x=>`<div class="v2192-month ${x.needCheck>0?"v2195-month-error":""}" ${x.needCheck>0?`onclick="v2195OpenMonthIssues('${x.key}')"`:""}><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">ABNB ${x.ical} • ADMIN/Direct ${x.admin}</div>${x.needCheck>0?`<span class="err">⚠ ERROR • ${x.needCheck} NEED TO CHECK • TEKAN</span>`:`<span class="ok">✓ TALLY</span>`}</div>`).join("")}
+    </div>
+
+    <div class="v2192-summary">Bulan lepas disembunyikan • Error ikut range Check-in → Check-out. Bila data tally selepas Sync, error hilang sendiri.</div>
+
+    <div class="v2192-list">
+     ${changes.length?changes.slice(0,12).map(x=>`<div class="v2192-item ${x.type==="NEW"?"new":"removed"}"><div class="v2192-row"><div><div class="v2192-who">${x.type==="NEW"?"🟢 NEW AIRBNB BOOKING":"🔴 AIRBNB BLOCK REMOVED — SEMAK CANCEL"}</div><div class="v2192-meta">${v2192Esc(x.checkIn)} → ${v2192Esc(x.checkOut)}<br>${x.type==="NEW"?"Semak nama guest di Airbnb kemudian isi detail Admin.":"Semak Airbnb dahulu. Admin tidak auto-cancel."}</div></div><div class="v2192-actions"><button class="v2192-use" onclick="v2192UseDates('${v2192Esc(x.checkIn)}','${v2192Esc(x.checkOut)}')">${x.type==="NEW"?"GUNA TARIKH":"SEMAK TARIKH"}</button><button class="v2192-done" onclick="v2192Resolve('${v2192Esc(x.key)}')">SUDAH SEMAK</button></div></div></div>`).join(""):'<div class="v2192-note">Tiada perubahan Airbnb baharu sejak perbandingan terakhir.</div>'}
+    </div>
+   </div>
   </div>`;
 }
 async function v2192Resolve(key){
@@ -9707,7 +10070,8 @@ Object.assign(window,{
  v2192SyncAndCheck,
  v2192Resolve,
  v2192UseDates,
- v2192Compare
+ v2192Compare,
+ v2192ToggleMonitor
 });
 
 // Make the monitor persistent after every dashboard refresh.
@@ -9731,7 +10095,183 @@ window.v214ActivateTab=v214ActivateTab;
 
 // Immediate visual init. The card must appear even before a successful Firebase state load.
 setTimeout(()=>{try{v2192RenderMonitor();v2192LoadState().then(()=>v2192RenderMonitor());}catch(e){console.warn("V2.19.2 init",e)}},1800);
-window.THE5R_AIRBNB_MONITOR_VERSION="V2.19.2_FIREBASE_MODULE_SAFE";
+window.THE5R_AIRBNB_MONITOR_VERSION="V2.21.1E_COMPACT_COLLAPSIBLE_MONITOR";
+
+// ============================================================
+// V2.21.2 — QUICK RETURN SD AFTER CHECKOUT
+// Owner workflow:
+// Checkout recorded → admin confirms unit checked / no issue → refund in one step.
+// Refund BEFORE checkout remains blocked.
+// ============================================================
+async function v2212QuickReturnSd(i){
+ const d=bookingCache[i]; if(!d)return;
+ const r=v217RefundInfo(d);
+
+ if(!v21716CheckOutRecorded(d)){
+  alert("RETURN SD hanya dibenarkan selepas Check-out direkod.");
+  return;
+ }
+ if(r.pending<=0){
+  alert(r.refunded>0?"Security Deposit sudah dipulangkan.":"Tiada baki Security Deposit untuk dipulangkan.");
+  return;
+ }
+
+ const guest=d.guestName||d.guest||"Guest";
+ const amount=r.pending;
+ const ok=confirm(
+  `RETURN SECURITY DEPOSIT\n\nGuest: ${guest}\nAmaun: RM ${amount.toFixed(2)}\n\nSahkan villa sudah diperiksa ringkas dan tiada isu / kerosakan yang perlu ditahan?\n\nTekan OK untuk terus Return SD.`
+ );
+ if(!ok)return;
+
+ const refundTimestamp=new Date().toISOString();
+ const transactions=[...(Array.isArray(d.transactions)?d.transactions:[])];
+ transactions.push({
+  type:"Refund",
+  date:localTodayISO(),
+  amount,
+  note:"Security Deposit Refund - Quick Return after checkout",
+  refundTimestamp,
+  approvalTimestamp:refundTimestamp,
+  status:"Processed"
+ });
+
+ const nextForMath={
+  ...d,
+  inspectionStatus:"DONE",
+  refundApproved:true,
+  refundApprovedAmount:amount,
+  refundProcessed:true
+ };
+ const m=paymentMathFromBooking(nextForMath,transactions);
+
+ try{
+  await updateDoc(doc(db,"bookings",d.id),{
+   transactions,
+   inspectionStatus:"DONE",
+   inspectionAt:serverTimestamp(),
+   refundApproved:true,
+   refundApprovedAt:serverTimestamp(),
+   refundApprovedAmount:amount,
+   refundProcessed:true,
+   refundProcessedAt:serverTimestamp(),
+   refundStatus:"Refunded",
+   refundAt:serverTimestamp(),
+   lifecycleStatus:"REFUND_PROCESSED",
+   grossDue:m.due,
+   totalIncoming:m.incoming,
+   totalRefund:m.refunds,
+   netPaid:m.netPaid,
+   balance:m.balance,
+   paymentStatus:m.status,
+   securityDepositReceived:m.securityDepositReceived,
+   securityDepositRefunded:m.securityDepositRefunded,
+   securityDepositBalance:m.securityDepositBalance,
+   updatedAt:serverTimestamp()
+  });
+
+  await load();
+  if(window.v214ActivateTab)window.v214ActivateTab("completed");
+  alert(`Security Deposit RM ${amount.toFixed(2)} berjaya direkod sebagai RETURNED.`);
+ }catch(e){
+  console.error(e);
+  alert("Return SD gagal: "+(e?.message||e));
+ }
+}
+window.v2212QuickReturnSd=v2212QuickReturnSd;
+
+// Simpler owner-facing refund strip.
+// Still blocks any refund before checkout.
+v217RefundStripHtml=function(d,i){
+ const r=v217RefundInfo(d);
+ const checkedOut=v21716CheckOutRecorded(d);
+
+ if(!checkedOut){
+  return `<div class="v217-refund-strip"><div><div class="v217-refund-main">SD HELD RM ${r.pending.toFixed(2)}</div><div class="v217-refund-sub">Refund hanya dibuka selepas Check-out direkod.</div></div></div>`;
+ }
+
+ if(r.paid<=0 && r.refunded<=0){
+  return `<div class="v217-refund-strip done"><div><div class="v217-refund-main">CHECK-OUT SELESAI</div><div class="v217-refund-sub">Tiada Security Deposit direkod diterima.</div></div></div>`;
+ }
+
+ if(r.pending<=0 && r.refunded>0){
+  return `<div class="v217-refund-strip done"><div><div class="v217-refund-main">✅ SD RETURNED</div><div class="v217-refund-sub">SD diterima RM ${r.paid.toFixed(2)} • Refunded RM ${r.refunded.toFixed(2)} • Baki RM 0.00</div></div></div>`;
+ }
+
+ return `<div class="v217-refund-strip pending"><div><div class="v217-refund-main">RETURN SD RM ${r.pending.toFixed(2)}</div><div class="v217-refund-sub">Check-out sudah direkod • buat pemeriksaan ringkas kemudian terus return.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="v217-refund-btn" onclick="v2212QuickReturnSd(${i})">RETURN SD RM${r.pending.toFixed(0)}</button><button type="button" class="gray" onclick="v2177CompleteInspection(${i})">ADA ISU / INSPECTION</button></div></div>`;
+};
+
+window.THE5R_SD_QUICK_RETURN_VERSION="V2.21.2_CHECKOUT_THEN_ONE_CLICK_RETURN";
+window.THE5R_SD_REFUND_GUARD_FIX_VERSION="V2.21.3_SD300_REFUND_CONSISTENCY";
+window.THE5R_PAYMENT_ACCOUNT_REPORT_VERSION="V2.22.0_MAYBANK_DEPOSIT_MONTHLY_PDF";
+window.THE5R_PLATFORM_NETPAY_VERSION="V2.22.1_PLATFORM_NETPAY_REQUIRED_REPORT";
+window.THE5R_SD_POCKET_VERSION="V2.22.2_SD_SEPARATE_POCKET";
+
+// ============================================================
+// V2.21.3 — AUTHORITATIVE DIRECT PAYMENT ALLOCATION
+// Direct rule: actual money received settles rental first; any excess up to
+// the configured Security Deposit becomes SD. Transaction rows remain unchanged
+// as the audit trail.
+// ============================================================
+function v2213AuthoritativeDirectAllocation(d,transactions){
+ const tx=Array.isArray(transactions)?transactions:[];
+ const m=v21710MathCore(d,tx);
+ const dep=Math.max(0,Number(d?.securityDeposit ?? d?.deposit ?? 300));
+ const platform=String(d?.platform||"Direct").trim().toLowerCase();
+ if(platform!=="direct")return {...m,effectiveDepositReceived:Math.min(dep,Math.max(0,Number(m.securityDepositReceived||0)))};
+
+ // Use transaction truth first. Stored aggregates are only a fallback for legacy records.
+ const storedIncoming=Math.max(0,Number(d?.totalIncoming||0),Number(d?.netPaid||0)+Number(d?.totalRefund||0));
+ const authoritativeIncoming=Math.max(Number(m.incoming||0),storedIncoming);
+ const rentalDue=Math.max(0,Number(m.rentalOtherDue||0));
+ const inferredFromTotal=Math.max(0,authoritativeIncoming-rentalDue);
+ const effectiveDepositReceived=Math.min(dep,Math.max(Number(m.securityDepositReceived||0),inferredFromTotal));
+ const refunded=Math.max(0,Number(m.securityDepositRefunded||0));
+ const depositBalance=Math.max(0,dep-effectiveDepositReceived);
+ return {...m,
+  incoming:authoritativeIncoming,
+  securityDepositReceived:effectiveDepositReceived,
+  securityDepositRefunded:refunded,
+  securityDepositBalance:depositBalance,
+  effectiveDepositReceived
+ };
+}
+
+// Final refund source of truth.
+v217RefundInfo=function(d){
+ const dep=Math.max(0,Number(d?.securityDeposit ?? d?.deposit ?? 300));
+ const tx=Array.isArray(d?.transactions)?d.transactions:[];
+ const m=v2213AuthoritativeDirectAllocation(d,tx);
+ const paid=Math.min(dep,Math.max(0,Number(m.effectiveDepositReceived||m.securityDepositReceived||0)));
+ const refunded=Math.max(0,Number(m.securityDepositRefunded||0),Number(d?.securityDepositRefunded||0),Number(d?.totalRefund||0));
+ const pending=Math.max(0,paid-refunded);
+ return {dep,paid,refunded,pending,completed:typeof v21716CompletionReady==="function"?v21716CompletionReady(d):!!d?.checkOutAt};
+};
+
+function v2213RenderAllocationHint(){
+ const box=$("v2213AllocationHint"); if(!box)return;
+ const platform=String($("platform")?.value||"Direct");
+ const rent=Math.max(0,Number($("rent")?.value||0));
+ const dep=Math.max(0,Number($("securityDeposit")?.value||300));
+ const tx=typeof getTransactions==="function"?getTransactions():[];
+ const d={platform,rent,securityDeposit:dep};
+ const m=v2213AuthoritativeDirectAllocation(d,tx);
+ if(platform!=="Direct"){
+  box.innerHTML=`<b>AUTO ALLOCATION:</b> Platform booking • Rental dibayar melalui platform • SD diterima RM ${Number(m.securityDepositReceived||0).toFixed(2)} / RM ${dep.toFixed(2)}`;
+  return;
+ }
+ box.innerHTML=`<b>AUTO ALLOCATION:</b> Total diterima RM ${Number(m.incoming||0).toFixed(2)} → Sewa/Caj RM ${Number(m.rentalOtherPaid||0).toFixed(2)} / RM ${Number(m.rentalOtherDue||0).toFixed(2)} + <b>SD RM ${Number(m.securityDepositReceived||0).toFixed(2)} / RM ${dep.toFixed(2)}</b> → Baki RM ${Number(m.balance||0).toFixed(2)}`;
+}
+
+const v2213BaseUpdateTransactionSummary=updateTransactionSummary;
+updateTransactionSummary=function(){
+ v2213BaseUpdateTransactionSummary();
+ v2213RenderAllocationHint();
+};
+
+window.v2213AuthoritativeDirectAllocation=v2213AuthoritativeDirectAllocation;
+window.THE5R_PAYMENT_ALLOCATION_VERSION="V2.21.3_RENT_FIRST_SD_EXCESS";
+
+
 
 </script>
 
