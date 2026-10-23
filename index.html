@@ -1901,6 +1901,66 @@ function v2221ValidatePlatformNetPay(){
  return true;
 }
 
+
+// ============================================================
+// V2.23.2 — GOOGLE CALENDAR AUTO SYNC
+// ============================================================
+const V2232_GCAL_URL_KEY="THE5R_GCAL_WEBAPP_URL";
+const V2232_GCAL_SECRET_KEY="THE5R_GCAL_SHARED_SECRET";
+function v2232GcalUrl(){return String(localStorage.getItem(V2232_GCAL_URL_KEY)||"").trim();}
+function v2232GcalSecret(){return String(localStorage.getItem(V2232_GCAL_SECRET_KEY)||"").trim();}
+function v2232GcalConfigured(){return /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/i.test(v2232GcalUrl())&&!!v2232GcalSecret();}
+function v2232GcalPayload(d,action="upsert"){return{
+ action,secret:v2232GcalSecret(),bookingId:String(d?.id||""),bookingNo:String(d?.bookingNo||""),
+ guestName:String(d?.guestName||d?.guest||"Guest"),phone:String(d?.phone||""),platform:String(d?.platform||""),
+ checkIn:String(d?.checkIn||"").slice(0,10),checkOut:String(d?.checkOut||"").slice(0,10),
+ guests:Number(d?.guests||0),status:String(d?.status||""),isTrashed:d?.isTrashed===true,
+ location:"THE 5R VILLA, A'Famosa Resort, Alor Gajah, Melaka"
+};}
+async function v2232GcalPost(d,action="upsert",silent=true){
+ if(!v2232GcalConfigured()){if(!silent)alert("Google Calendar Auto Sync belum setup.");return {ok:false};}
+ if(!d?.id)return {ok:false};
+ try{
+  await fetch(v2232GcalUrl(),{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(v2232GcalPayload(d,action))});
+  return {ok:true};
+ }catch(e){console.warn("Google Calendar auto sync gagal",e);if(!silent)alert("Google Calendar sync gagal.");return {ok:false};}
+}
+async function v2232GcalSyncById(id,action="upsert"){
+ if(!id)return;
+ let d=(bookingCache||[]).find(x=>x.id===id);
+ if(!d){try{const s=await getDoc(doc(db,"bookings",id));if(s.exists())d={id:s.id,...s.data()};}catch(e){}}
+ if(d)await v2232GcalPost(d,action,true);
+}
+async function v2232GcalSyncAll(){
+ if(!v2232GcalConfigured()){alert("Setup Google Calendar dahulu.");v2232GcalOpenSetup();return;}
+ const active=(bookingCache||[]).filter(d=>d?.id&&d.isTrashed!==true&&!["cancelled","rejected"].includes(String(d.status||"").toLowerCase()));
+ let n=0;for(const d of active){const r=await v2232GcalPost(d,"upsert",true);if(r.ok)n++;}
+ alert(`Google Calendar: ${n} booking dihantar untuk sync.`);
+}
+function v2232GcalEnsureSetup(){
+ if($("v2232GcalBox"))return;
+ const host=$("v214VillaPanel")||$("app");if(!host)return;
+ const box=document.createElement("div");box.id="v2232GcalBox";box.className="card";
+ box.innerHTML=`<h3 style="margin-top:0">📅 Google Calendar Auto Sync</h3>
+ <div class="note">Setup sekali. Selepas itu Save/Edit booking auto masuk atau update Google Calendar.</div>
+ <div id="v2232GcalStatus" class="status"></div>
+ <div id="v2232GcalFields" class="grid hidden" style="margin-top:10px">
+  <div class="full"><label>Apps Script Web App URL</label><input id="v2232GcalUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
+  <div class="full"><label>Shared Secret</label><input id="v2232GcalSecret" type="password"></div>
+ </div>
+ <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+  <button type="button" class="gray" onclick="v2232GcalOpenSetup()">SETUP</button>
+  <button type="button" class="blue" onclick="v2232GcalSaveSetup()">SAVE SETUP</button>
+  <button type="button" class="green" onclick="v2232GcalSyncAll()">SYNC SEMUA BOOKING</button>
+ </div>`;
+ host.appendChild(box);v2232GcalRefreshStatus();
+}
+function v2232GcalRefreshStatus(){const s=$("v2232GcalStatus");if(!s)return;if(v2232GcalConfigured()){s.className="status ok";s.textContent="✅ AUTO SYNC GOOGLE CALENDAR AKTIF";}else{s.className="status";s.textContent="⚠️ Google Calendar belum setup";}}
+function v2232GcalOpenSetup(){v2232GcalEnsureSetup();$("v2232GcalFields")?.classList.remove("hidden");if($("v2232GcalUrl"))$("v2232GcalUrl").value=v2232GcalUrl();if($("v2232GcalSecret"))$("v2232GcalSecret").value=v2232GcalSecret();}
+function v2232GcalSaveSetup(){const url=String($("v2232GcalUrl")?.value||"").trim(),sec=String($("v2232GcalSecret")?.value||"").trim();if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/i.test(url)){alert("URL Apps Script tidak sah.");return;}if(sec.length<6){alert("Shared Secret terlalu pendek.");return;}localStorage.setItem(V2232_GCAL_URL_KEY,url);localStorage.setItem(V2232_GCAL_SECRET_KEY,sec);v2232GcalRefreshStatus();alert("Google Calendar Auto Sync disimpan.");}
+Object.assign(window,{v2232GcalOpenSetup,v2232GcalSaveSetup,v2232GcalSyncAll});
+setTimeout(()=>{try{v2232GcalEnsureSetup();}catch(e){}},1800);
+
 function formData(){
  const m=getPaymentMath();
  return {
@@ -2138,6 +2198,7 @@ $("confirmDelete").onclick=async()=>{
    trashedBy:"Admin",
    updatedAt:serverTimestamp()
   });
+   await v2232GcalPost({...d,isTrashed:true},"delete",true);
 
   // Refresh active UI immediately after the Firestore write succeeds.
   // External calendar sync is secondary and must not make Trash look like it failed.
@@ -2218,20 +2279,22 @@ $("save").onclick=async()=>{
     ...data,
     updatedAt:serverTimestamp()
    });
+   await v2232GcalSyncById(editId,"upsert");
    $("saveStatus").className="status ok";
-   $("saveStatus").textContent="✅ Booking berjaya dikemas kini.";
+   $("saveStatus").textContent="✅ Booking berjaya dikemas kini • Google Calendar auto-sync.";
   }else{
    const bookingNo=await getNextBookingNo();
    const receiptNo=bookingNo.replace("5RV-BKG-","5RV-RCP-");
-   await addDoc(collection(db,"bookings"),{
+   const newBookingRef=await addDoc(collection(db,"bookings"),{
     ...data,
     bookingNo,
     receiptNo,
     createdAt:serverTimestamp(),
     updatedAt:serverTimestamp()
    });
+   await v2232GcalPost({id:newBookingRef.id,...data,bookingNo,receiptNo},"upsert",true);
    $("saveStatus").className="status ok";
-   $("saveStatus").textContent="✅ Booking berjaya disimpan. Booking No: "+bookingNo;
+   $("saveStatus").textContent="✅ Booking berjaya disimpan • Google Calendar auto-sync. Booking No: "+bookingNo;
   }
   await syncDirectToPublic();
   resetDirectOverride();
@@ -6972,6 +7035,27 @@ function v222DirectRows(b){
    continue;
   }
  }
+
+ // V2.23.2 FINAL RECONCILIATION:
+ // Ensure all Direct incoming amounts are allocated to Rental + SD targets.
+ const incomingTypes=new Set(["Booking Payment","Payment","Security Deposit"]);
+ const incomingTx=tx.filter(t=>incomingTypes.has(String(t.type||"")));
+ const totalIncoming=incomingTx.reduce((s,t)=>s+Math.max(0,Number(t.amount||0)),0);
+ const rentalAllocated=rows.filter(r=>r.type==="rental").reduce((s,r)=>s+Number(r.amountSen||0)/100,0);
+ const sdAllocated=rows.filter(r=>r.type==="sd").reduce((s,r)=>s+Number(r.amountSen||0)/100,0);
+ let unallocated=Math.max(0,totalIncoming-rentalAllocated-sdAllocated);
+
+ if(unallocated>0.0001){
+  const d=(incomingTx[incomingTx.length-1]&&v222Date(incomingTx[incomingTx.length-1].date))||v222Date(b?.checkIn);
+  const rentalNeed=Math.max(0,rent-rentalAllocated);
+  const addRent=Math.min(unallocated,rentalNeed);
+  if(addRent>0){push(d,"rental",addRent,"Auto reconciliation • Rental allocation");unallocated-=addRent;}
+
+  const currentSd=rows.filter(r=>r.type==="sd").reduce((s,r)=>s+Number(r.amountSen||0)/100,0);
+  const sdNeed=Math.max(0,dep-currentSd);
+  const addSd=Math.min(unallocated,sdNeed);
+  if(addSd>0){push(d,"sd",addSd,"Auto reconciliation • Security Deposit allocation");unallocated-=addSd;}
+ }
  return rows;
 }
 
@@ -10811,6 +10895,8 @@ setTimeout(()=>{
 
 
 
+
+window.THE5R_AUTO_GCAL_AND_DIRECT_RECON_VERSION="V2.23.2_AUTO_GCAL_DIRECT_RECON";
 </script>
 </body>
 </html>
