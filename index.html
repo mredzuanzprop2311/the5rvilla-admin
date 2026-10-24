@@ -1113,7 +1113,7 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
  <div class="top">
   <div>
    <h1>THE 5R VILLA</h1>
-   <div>ADMIN LIVE V2.17.16 • REFUND GUARD HARDENING HOTFIX • STRICT LIFECYCLE</div>
+   <div>ADMIN LIVE V2.23.4 • COMPLETED: EDIT, SIMPAN & RETURN SD</div>
    <div class="note">Tambah • View • Edit • Delete • Booking No cloud</div>
   </div>
   <div>
@@ -1812,6 +1812,7 @@ function txIsRefund(type){ return type==="Refund"; }
 function createTransactionRow(data={}){
  const row=document.createElement("div");
  row.className="tx-row";
+ row.__v2234Original={...data};
  row.innerHTML=`
   <div><label>Jenis</label><select class="tx-type">${TX_TYPES.map(t=>`<option value="${t}" ${data.type===t?"selected":""}>${txTypeLabel(t)}</option>`).join("")}</select></div>
   <div><label>Tarikh</label><input class="tx-date" type="date" value="${data.date||""}"></div>
@@ -1828,6 +1829,8 @@ function createTransactionRow(data={}){
 
 function getTransactions(){
  return [...document.querySelectorAll("#transactionRows .tx-row")].map(row=>({
+  ...row.__v2234Original,
+  ...(Number.isInteger(row.__v2234Origin)?{__v2234Origin:row.__v2234Origin}:{}),
   type:row.querySelector(".tx-type").value,
   date:row.querySelector(".tx-date").value,
   amount:Number(row.querySelector(".tx-amount").value||0),
@@ -6801,7 +6804,7 @@ const v218Money=n=>'RM '+(Number(n||0)/100).toLocaleString('en-MY',{minimumFract
 const v218Clone=v=>JSON.parse(JSON.stringify(v,(k,x)=>typeof x?.toDate==='function'?x.toDate().toISOString():x));
 function v218Actor(){const u=auth.currentUser;if(!u)throw Error('Admin login diperlukan.');return {uid:u.uid,admin:u.email||u.uid};}
 function v218Financial(ref){return ['bookings','cashbookEntries'].includes(ref.path.split('/')[0])||ref.path==='settings/sdReserve';}
-function v218Snapshot(d){if(!d)return null;const fields=['bookingNo','villaId','platform','checkIn','checkOut','transactions','rent','securityDeposit','amountPaid','securityDepositPaid','platformNetPayoutExpected','platformPayoutDate','isTrashed','status','checkInAt','checkOutAt','inspectionStatus','refundApproved','refundApprovedAmount','refundProcessed','refundTimestamp','financialVersion','date','kind','category','amountSen','note','reference','bookingId','amount','voidReason'];const out={};fields.forEach(k=>{if(d[k]!==undefined)out[k]=v218Clone(d[k]);});return out;}
+function v218Snapshot(d){if(!d)return null;const fields=['bookingNo','villaId','platform','checkIn','checkOut','transactions','rent','securityDeposit','amountPaid','securityDepositPaid','platformNetPayoutExpected','platformPayoutDate','securityDepositReceived','securityDepositRefunded','securityDepositPaid','totalIncoming','totalRefund','netPaid','stayStatus','lifecycleStatus','refundStatus','isTrashed','status','checkInAt','checkOutAt','inspectionStatus','refundApproved','refundApprovedAmount','refundProcessed','refundTimestamp','financialVersion','date','kind','category','amountSen','note','reference','bookingId','amount','voidReason'];const out={};fields.forEach(k=>{if(d[k]!==undefined)out[k]=v218Clone(d[k]);});return out;}
 function v218TxKey(t){
  const x=t||{};
  return [
@@ -6867,6 +6870,8 @@ async function v218Atomic(ref,data,mode,options){
   if(mode==='update'&&!before)throw Error('Rekod tidak ditemui.');
   if(mode==='create'&&before)throw Error('Rekod telah wujud.');
 
+  if(data?.__v2234EditBase&&data.__v2234EditBase.id!==ref.id)throw Error('Borang edit tidak sepadan dengan booking.');
+  data=v2234PrepareWrite(data,before);
   let writeData=data;
 
   // APPEND-ONLY FINANCIAL WRITE:
@@ -6876,7 +6881,7 @@ async function v218Atomic(ref,data,mode,options){
    const previewNext={...before,...data};
    const info=v218RefundAppendInfo(ref,before,previewNext);
 
-   if(info.appendOnly){
+   if(info.appendOnly&&!v2234Completed(before)){
     const serverTx=Array.isArray(before.transactions)?before.transactions:[];
     const serverKeys=new Set(serverTx.map(v218TxKey));
     const mergedTx=[...serverTx];
@@ -7723,7 +7728,7 @@ $("v217SaveRefund")?.addEventListener("click",async function(e){
   `Tarikh: ${date}`
  ]))return;
 
- const rows=Array.isArray(d.transactions)?d.transactions.map(x=>({...x})):[];
+ const rows=Array.isArray(d.transactions)?d.transactions.map((x,i)=>({...x,__v2234Origin:i})):[];
  rows.push({
   type:"Refund",
   date,
@@ -7737,7 +7742,9 @@ $("v217SaveRefund")?.addEventListener("click",async function(e){
  const settled=afterRefund+0.001>=before.paid;
 
  try{
-  await fireUpdateDoc(doc(db,"bookings",d.id),{
+  await updateDoc(doc(db,"bookings",d.id),{
+   __v2234EditBase:{id:d.id,transactions:(d.transactions||[]).map(x=>({...x}))},
+   __v2234RefundAmount:amount,
    transactions:rows,
    securityDepositRefunded:afterRefund,
    totalRefund:afterRefund,
@@ -10479,6 +10486,206 @@ updateTransactionSummary=function(){
 window.v2213AuthoritativeDirectAllocation=v2213AuthoritativeDirectAllocation;
 window.THE5R_PAYMENT_ALLOCATION_VERSION="V2.21.3_RENT_FIRST_SD_EXCESS";
 
+// V2.23.4 — Completed is an explicit admin decision; old lifecycle rules do not reopen it.
+function v2234Completed(d){
+ const done=['completed','checked-out','checkedout','closed','finished','refunded'];
+ return !!d?.checkOutAt || [d?.status,d?.stayStatus,d?.lifecycleStatus].some(v=>done.includes(String(v||'').trim().toLowerCase()));
+}
+function v2234Stable(v){
+ if(Array.isArray(v))return v.map(v2234Stable);
+ if(v&&typeof v==='object')return Object.fromEntries(Object.keys(v).sort().map(k=>[k,v2234Stable(v[k])]));
+ return v;
+}
+function v2234Same(a,b){return JSON.stringify(v2234Stable(a))===JSON.stringify(v2234Stable(b));}
+function v2234MergeTx(base,proposed,server){
+ const result=server.map(t=>({...t})),used=new Set();
+ for(let i=0;i<base.length;i++){
+  const old=base[i];
+  const j=result.findIndex((t,n)=>!used.has(n)&&(old.id&&t.id?old.id===t.id:v2234Same(t,old)));
+  const newIndex=proposed.findIndex(t=>t.__v2234Origin===i||(old.id&&t.id===old.id));
+  const changed=newIndex>=0?proposed[newIndex]:null;
+  if(j>=0){
+   used.add(j);
+   if(!changed){result[j]=null;continue;}
+   const clean={...changed};delete clean.__v2234Origin;
+   // Keep the latest row when the form did not change it.
+   if(!v2234Same(clean,old))result[j]={...result[j],...clean};
+  }else if(changed){
+   const clean={...changed};delete clean.__v2234Origin;
+   // A concurrent edit changed this legacy row: apply only fields edited in this form.
+   const fallback=i<result.length&&!used.has(i)?i:-1;
+   if(fallback>=0){used.add(fallback);for(const k of Object.keys(clean))if(!v2234Same(clean[k],old[k]))result[fallback][k]=clean[k];}
+   else if(!v2234Same(clean,old))result.push(clean);
+  }
+ }
+ for(const t of proposed){
+  if(Number.isInteger(t.__v2234Origin)&&t.__v2234Origin>=0&&t.__v2234Origin<base.length)continue;
+  if(t.id&&base.some(b=>b.id===t.id))continue;
+  const clean={...t};delete clean.__v2234Origin;
+  if(!result.some(x=>x&&(clean.id&&x.id?clean.id===x.id:v2234Same(x,clean))))result.push(clean);
+ }
+ return result.filter(Boolean);
+}
+function v2234PrepareWrite(data,before){
+ const out={...data},base=out.__v2234EditBase,requestedRefund=Number(out.__v2234RefundAmount||0);delete out.__v2234EditBase;delete out.__v2234RefundAmount;
+ if(requestedRefund>0&&v2234Completed(before)){
+  const latest=v217RefundInfo(before);
+  if(latest.pending+0.001<requestedRefund)throw Error('SD sudah dipulangkan atau baki SD terkini kurang daripada amaun ini.');
+ }
+ if(!Array.isArray(out.transactions))return out;
+ const proposed=out.transactions;
+ if(base&&v2234Completed(before)){
+  out.transactions=v2234MergeTx(base.transactions||[],proposed,before.transactions||[]);
+ }else out.transactions=proposed.map(t=>{const clean={...t};delete clean.__v2234Origin;return clean;});
+ if(!v2234Completed(before))return out;
+ // The live server remains Completed even when a legacy form has no matching status option.
+ if(!String(out.status||'').trim())out.status=before.status||'Completed';
+ const merged={...before,...out},m=paymentMathFromBooking(merged,out.transactions);
+ const validRefunds=out.transactions.filter(t=>String(t.type||'')==='Refund'&&!v21715IsVoidedTx(t));
+ const baseRefunds=(base?.transactions||[]).filter(t=>String(t.type||'')==='Refund'&&!v21715IsVoidedTx(t));
+ const refundsEdited=base&&!v2234Same(validRefunds,baseRefunds);
+ const refund=requestedRefund>0?v217RefundInfo(before).refunded+requestedRefund:Math.max(0,Number(m.securityDepositRefunded||0),refundsEdited?0:Number(before.securityDepositRefunded||0),refundsEdited?0:Number(before.totalRefund||0));
+ const previousMath=paymentMathFromBooking(before,before.transactions||[]);
+ const receivedEdited=base&&Number(m.securityDepositReceived||0)!==Number(previousMath.securityDepositReceived||0);
+ Object.assign(out,{grossDue:m.due,totalIncoming:m.incoming,totalRefund:refund,netPaid:Math.max(0,Number(m.incoming||0)-refund),balance:m.balance,paymentStatus:m.status,securityDepositReceived:Math.max(Number(m.securityDepositReceived||0),receivedEdited?0:Number(before.securityDepositReceived||0),receivedEdited?0:Number(before.securityDepositPaid||0)),securityDepositPaid:Math.max(Number(m.securityDepositReceived||0),receivedEdited?0:Number(before.securityDepositReceived||0),receivedEdited?0:Number(before.securityDepositPaid||0)),securityDepositRefunded:refund,securityDepositBalance:m.securityDepositBalance});
+ return out;
+}
+let v2234EditBase=null;
+const v2234BaseEditBooking=editBooking;
+editBooking=function(i){
+ const d=bookingCache[i];v2234EditBase=d?{id:d.id,transactions:(d.transactions||[]).map(t=>({...t})),status:d.status,stayStatus:d.stayStatus,lifecycleStatus:d.lifecycleStatus,checkOutAt:d.checkOutAt}:null;
+ v2234BaseEditBooking(i);
+ const rows=[...document.querySelectorAll('#transactionRows .tx-row')];
+ rows.forEach((row,n)=>{if(n<(v2234EditBase?.transactions.length||0))row.__v2234Origin=n;});
+ if(d&&v2234Completed(d)){
+  if($('status')&&![...$('status').options].some(o=>o.value===d.status)){
+   const option=document.createElement('option');option.value=d.status||'Completed';option.textContent=d.status||'Completed';$('status').appendChild(option);
+  }
+  if($('status'))$('status').value=d.status||'Completed';
+ }
+};window.editBooking=editBooking;
+const v2234BaseFormData=formData;
+formData=function(){const out=v2234BaseFormData();if(v2234EditBase&&$('editId')?.value===v2234EditBase.id)out.__v2234EditBase=v2234EditBase;return out;};
+const v2234BaseClearForm=clearForm;
+clearForm=function(){v2234EditBase=null;return v2234BaseClearForm();};
+
+// All SD displays use the refund information already shown in booking details.
+const v2234OriginalRefundInfo=v217RefundInfo;
+v217RefundInfo=function(d){
+ const r=v2234OriginalRefundInfo(d);
+ if(!v2234Completed(d))return r;
+ const paid=Math.min(r.dep,Math.max(r.paid,Number(d?.securityDepositReceived||0),Number(d?.securityDepositPaid||0)));
+ // Amount evidence only: Completed/refundProcessed alone never invents a refund.
+ const refunded=Math.max(r.refunded,Number(d?.securityDepositRefunded||0),Number(d?.totalRefund||0));
+ return {...r,paid,refunded,pending:Math.max(0,paid-refunded),completed:true};
+};
+v21715SdPosition=function(d){
+ const r=v217RefundInfo(d);
+ return {dep:r.dep,paid:r.paid,refunded:r.refunded,held:r.pending,pending:Math.max(0,r.dep-r.paid),m:paymentMathFromBooking(d,Array.isArray(d.transactions)?d.transactions:[])};
+};
+const v2234BaseData=v218Data;
+v218Data=function(){
+ const data=v2234BaseData();
+ data.positions=data.positions.map(x=>{
+  const b=v218Bookings.find(b=>b.id===x.bookingId);if(!b||!v2234Completed(b))return x;
+  const r=v217RefundInfo(b);
+  return {...x,receivedSen:Math.round(r.paid*100),refundedSen:Math.round(r.refunded*100),heldSen:Math.round(r.pending*100)};
+ });
+ data.issues=data.issues.filter(x=>{
+  const b=v218Bookings.find(b=>b.id===x.bookingId);
+  if(!b||!v2234Completed(b))return true;
+  if(/strict lifecycle|refund.*guard/i.test(x.message))return false;
+  if(/Refund exceeds deposit/i.test(x.message)){const r=v217RefundInfo(b);return r.refunded>r.paid+0.001;}
+  return true;
+ });
+ return data;
+};
+const v2234BaseCheckout=v21716CheckOutRecorded;
+v21716CheckOutRecorded=function(d,today){return v2234Completed(d)||v2234BaseCheckout(d,today);};window.v21716CheckOutRecorded=v21716CheckOutRecorded;
+v21716CompletionReady=function(d){return v2234Completed(d)||v21716CheckOutRecorded(d);};window.v21716CompletionReady=v21716CompletionReady;
+v2168IsCompleted=v21716CompletionReady;window.v2168IsCompleted=v2168IsCompleted;
+const v2234BaseRepairNeeded=v21716FutureRepairNeeded;
+v21716FutureRepairNeeded=function(d,today){return !v2234Completed(d)&&v2234BaseRepairNeeded(d,today);};
+const v2234BaseIntegrityIssues=v21715IntegrityIssues;
+v21715IntegrityIssues=function(){
+ return v2234BaseIntegrityIssues().filter(x=>{
+  const b=bookingCache[x.i];
+  return !v2234Completed(b)||!/early refund|invalid.*refund|future.*(?:completed|lifecycle)|inspection|approval|checkOutAt tanpa|refund tanpa exact|refundProcessed tidak/i.test(x.title||'');
+ });
+};
+const v2234BasePayoutValidation=v2221ValidatePlatformNetPay;
+v2221ValidatePlatformNetPay=function(){return v2234Completed(bookingCache.find(b=>b.id===$('editId')?.value))||v2234BasePayoutValidation();};
+const v2234BaseConflict=findBookingConflict;
+findBookingConflict=async function(data,id=''){
+ const existing=bookingCache.find(b=>b.id===id);
+ if(id&&v2234Completed(existing))return null;
+ return v2234BaseConflict(data,id);
+};
+const v2234BaseCheckWrite=v218CheckBookingWrite;
+v218CheckBookingWrite=function(ref,before,next){
+ if(ref.path.split('/')[0]==='bookings'&&next&&v2234Completed(before))return;
+ return v2234BaseCheckWrite(ref,before,next);
+};
+const v2234BaseCountdown=v2233SdCountdown;
+v2233SdCountdown=function(b,today){if(v2234Completed(b))return 'Completed · baki SD belum dipulangkan';return v2234BaseCountdown(b,today);};
+window.THE5R_COMPLETED_POLICY_VERSION='V2.23.4_COMPLETED_FREE_EDIT_SD';
+
+const v2234BaseQuickReturn=v2212QuickReturnSd;
+const v2234RefundBusy=new Set();
+v2212QuickReturnSd=async function(i){
+ const d=bookingCache[i];if(!d)return;
+ if(!v2234Completed(d))return v2234BaseQuickReturn(i);
+ if(v2234RefundBusy.has(d.id))return;
+ const r=v217RefundInfo(d);
+ if(r.pending<=0){alert('SD sudah dipulangkan / tiada baki SD.');return;}
+ if(!confirm('Rekod pulangan SD untuk '+(d.guestName||d.guest||d.bookingNo||'Tetamu')+' — RM '+r.pending.toFixed(2)+'?'))return;
+ v2234RefundBusy.add(d.id);
+ try{
+  const stamp=new Date().toISOString();
+  const transactions=(d.transactions||[]).map((t,n)=>({...t,__v2234Origin:n}));
+  transactions.push({id:crypto.randomUUID(),type:'Refund',date:localTodayISO(),amount:r.pending,note:'Pulangan Security Deposit',refundTimestamp:stamp,status:'Processed',createdBy:auth.currentUser?.uid||'admin'});
+  await updateDoc(doc(db,'bookings',d.id),{
+   __v2234EditBase:{id:d.id,transactions:(d.transactions||[]).map(t=>({...t}))},
+   __v2234RefundAmount:r.pending,transactions,securityDepositRefunded:r.refunded+r.pending,totalRefund:r.refunded+r.pending,
+   refundProcessed:true,refundProcessedAt:serverTimestamp(),refundStatus:'Refunded',updatedAt:serverTimestamp()
+  });
+  await load();alert('SD dipulangkan. Baki SD Held RM0.00.');
+ }catch(e){alert('Return SD gagal: '+(e?.message||e));}
+ finally{v2234RefundBusy.delete(d.id);}
+};window.v2212QuickReturnSd=v2212QuickReturnSd;
+const v2234BaseRefundStrip=v217RefundStripHtml;
+v217RefundStripHtml=function(d,i){
+ if(!v2234Completed(d))return v2234BaseRefundStrip(d,i);
+ const r=v217RefundInfo(d);
+ if(r.pending<=0)return '<div class="v217-refund-strip done"><div><div class="v217-refund-main">COMPLETED · '+(r.refunded>0?'SD RETURNED':'TIADA BAKI SD')+'</div><div class="v217-refund-sub">SD diterima RM '+r.paid.toFixed(2)+' · Dipulangkan RM '+r.refunded.toFixed(2)+' · Baki SD RM0.00</div></div></div>';
+ return '<div class="v217-refund-strip pending"><div><div class="v217-refund-main">COMPLETED · SD HELD RM '+r.pending.toFixed(2)+'</div><div class="v217-refund-sub">Edit / simpan dan pulangan SD dibenarkan.</div></div><button type="button" class="v217-refund-btn" onclick="v2212QuickReturnSd('+i+')">RETURN SD RM'+r.pending.toFixed(2)+'</button></div>';
+};
+
+const v2234BaseCreateRow=createTransactionRow;
+createTransactionRow=function(data={}){
+ v2234BaseCreateRow(data);
+ const row=$('transactionRows')?.lastElementChild;if(!row)return;
+ row.__v2234Original={...data};
+ if(v2234Completed(v2234EditBase)){
+  row.classList.remove('v21715-tx-locked');
+  row.querySelectorAll('input,select,button').forEach(el=>el.disabled=false);
+  const type=row.querySelector('.tx-type');
+  if(type){if(![...type.options].some(o=>o.value==='Refund')){const o=document.createElement('option');o.value='Refund';o.textContent='Refund';type.appendChild(o);} [...type.options].forEach(o=>{if(o.value==='Refund')o.textContent='Refund';});}
+  const remove=row.querySelector('.tx-remove');if(remove){remove.textContent='Buang';remove.onclick=()=>{row.remove();updateTransactionSummary();};}
+  const hint=row.querySelector('.v21715-tx-note');if(hint)hint.textContent=data.voided?'VOID · tidak dikira dalam jumlah':'Completed · transaksi boleh diedit dan disimpan.';
+ }
+};
+getTransactions=function(){
+ return [...document.querySelectorAll('#transactionRows .tx-row')].map(row=>({
+  ...row.__v2234Original,
+  ...(Number.isInteger(row.__v2234Origin)?{__v2234Origin:row.__v2234Origin}:{}),
+  type:row.querySelector('.tx-type').value,date:row.querySelector('.tx-date').value,
+  amount:Number(row.querySelector('.tx-amount').value||0),note:row.querySelector('.tx-note').value.trim(),
+  ...(row.dataset.voided==='1'?{voided:true,status:'VOID',voidReason:row.dataset.voidReason||'',voidedAt:row.dataset.voidedAt||''}:{})
+ })).filter(t=>t.amount>0||t.date||t.note);
+};
+
+
 
 
 </script>
@@ -10508,7 +10715,7 @@ display:flex;gap:10px;align-items:center;justify-content:space-between}
  }
 
  document.addEventListener('DOMContentLoaded',()=>{
-  status('ADMIN V2.18.0 • CASHBOOK + STRICT REFUND GUARD');
+  status('ADMIN V2.23.4 • COMPLETED: EDIT, SIMPAN & RETURN SD');
   const fields=[...document.querySelectorAll('input,select,textarea')];
   fields.forEach(f=>f.addEventListener('input',()=>{dirty=true; lastAction=Date.now();}));
   document.querySelectorAll('button').forEach(b=>{
