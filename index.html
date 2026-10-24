@@ -7268,6 +7268,7 @@ function v218Render(){
  const t=V218.totals(d.entries,e=>e.date===day&&filter(e)),m=V218.totals(d.entries,e=>e.date.startsWith(month)&&filter(e));
  const selected=v218Bookings.filter(b=>vf==='all'||V218.villa(b)===vf),held=d.positions.reduce((s,x)=>s+x.heldSen,0);
  $('v218Held').textContent=v218Bookings.length?v218Money(held):v218Loaded?'RM 0.00':'—';
+ v2233RenderSdHeld();
  const ownerMonth=V218.today().slice(0,7),om=V218.totals(d.entries,e=>e.date.startsWith(ownerMonth));
  const occ=V218.occupancy(v218Bookings,ownerMonth,'VILLA_1');
  const upcoming=v218Bookings.filter(b=>!V218.cancelled(b)&&!b.isTrashed);
@@ -7291,7 +7292,39 @@ function v218Render(){
  $('v218Audit').innerHTML=v218Audits.length?v218Audits.slice().sort((a,b)=>V218.millis(b.at)-V218.millis(a.at)).slice(0,100).map(a=>{const at=V218.millis(a.at);return `<div class="v218-audit"><b>${esc(a.action)}</b><span>${esc(a.admin||a.actorUid)} · ${at?esc(new Date(at).toLocaleString('en-MY',{timeZone:'Asia/Kuala_Lumpur'})):'Server timestamp pending'}</span><small>${esc(a.entityPath)} · revision ${esc(a.version)}</small></div>`;}).join(''):'<p>Tiada audit V2.18.0 dibaca. Rekod lama tidak direka sebagai sejarah audit.</p>';
 }
 function v218OpenBooking(id){const i=bookingCache.findIndex(b=>b.id===id);if(i>=0)viewBooking(i);else alert('Booking dalam Trash / belum ada pada cache. Gunakan Trash Restore / Refresh; wang kekal dalam laporan.');}
-function v218OpenSD(){v218Setup();const p=v218Data().positions.filter(x=>x.heldSen>0);$('v218SDRows').innerHTML=p.length?p.map(x=>`<div class="v218-entry"><div><b>${esc(x.guest||x.bookingNo)}</b><p>${esc(x.bookingNo)} · ${esc(x.villaId)} ${x.trashed?'· TRASH':x.cancelled?'· CANCELLED':''}</p><small>Diterima ${v218Money(x.receivedSen)} · refund sah ${v218Money(x.refundedSen)}</small></div><strong>${v218Money(x.heldSen)}</strong></div>`).join(''):'<p>Tiada SD held daripada rekod yang dibaca.</p>';$('v218SDModal').classList.remove('hidden');}
+function v2233SdCountdown(b,today=V218.today()){
+ const dateDay=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))?Date.parse(s+'T00:00:00Z')/86400000:NaN;
+ const now=dateDay(today),ci=dateDay(b.checkIn),co=dateDay(b.checkOut);
+ if(V218.cancelled(b))return 'Dibatalkan · SD belum dipulangkan';
+ if(V218.millis(b.checkOutAt))return 'Sudah check-out · SD belum dipulangkan';
+ if(Number.isFinite(ci)&&ci>now)return 'Check-in '+(ci-now)+' hari lagi';
+ if(Number.isFinite(co)&&co===now)return 'Check-out hari ini';
+ if(Number.isFinite(co)&&co<now)return 'Tarikh check-out berlalu '+(now-co)+' hari · semak pulangan SD';
+ if(Number.isFinite(ci)&&ci===now)return 'Check-in hari ini'+(Number.isFinite(co)?' · check-out '+(co-now)+' hari lagi':'');
+ if(Number.isFinite(co)&&co>now)return 'Check-out '+(co-now)+' hari lagi';
+ return 'Tarikh penginapan perlu disemak';
+}
+function v2233SdRows(){
+ return v218Data().positions.filter(x=>x.heldSen>0).map(x=>({x,b:v218Bookings.find(b=>b.id===x.bookingId)||bookingCache.find(b=>b.id===x.bookingId)||{}}))
+ .sort((a,b)=>String(a.b.checkOut||'9999-99-99').localeCompare(String(b.b.checkOut||'9999-99-99'))||String(a.x.bookingId).localeCompare(String(b.x.bookingId)));
+}
+function v2233RenderSdRows(target,rows){
+ target.innerHTML=rows.length?rows.map(({x,b})=>'<article class="v218-entry" style="flex-wrap:wrap;gap:12px"><div style="min-width:0;flex:1"><button type="button" class="gray" style="text-align:left;white-space:normal;font-weight:700" data-sd-booking="'+esc(x.bookingId)+'">'+esc(b.guestName||b.guest||x.guest||x.bookingNo||'Tetamu')+' · Buka butiran</button><p>'+esc(x.bookingNo||b.bookingNo||'')+' · '+esc(x.villaId||'')+(x.trashed?' · TRASH':'')+'</p><p>Check-in: '+esc(b.checkIn?shortDate(b.checkIn):'—')+' → Check-out: '+esc(b.checkOut?shortDate(b.checkOut):'—')+'</p><b>'+esc(v2233SdCountdown(b))+'</b><p><small>Diterima '+v218Money(x.receivedSen)+' · dipulangkan '+v218Money(x.refundedSen)+'</small></p></div><strong>'+v218Money(x.heldSen)+'</strong></article>').join(''):'<p>Tiada SD held daripada rekod yang dibaca.</p>';
+ target.querySelectorAll('[data-sd-booking]').forEach(btn=>btn.onclick=()=>{
+  const id=btn.dataset.sdBooking;
+  if(!bookingCache.some(b=>b.id===id)){v218OpenBooking(id);return;}
+  $('v218SDModal')?.classList.add('hidden');
+  v218OpenBooking(id);
+ });
+}
+function v2233RenderSdHeld(){
+ const hero=$('v218Owner')?.querySelector('.v218-hero');if(!hero)return;
+ let list=$('v2233SdHeldList');if(!list){list=document.createElement('div');list.id='v2233SdHeldList';list.setAttribute('aria-label','Tetamu dengan SD masih dipegang');hero.insertAdjacentElement('afterend',list);}
+ const rows=v2233SdRows();v2233RenderSdRows(list,rows);
+ if($('v218SDModal')&&!$('v218SDModal').classList.contains('hidden'))v2233RenderSdRows($('v218SDRows'),rows);
+}
+function v218OpenSD(){v218Setup();v2233RenderSdRows($('v218SDRows'),v2233SdRows());$('v218SDModal').classList.remove('hidden');}
+
 function v218New(){if(!v218Loaded){alert('Cashbook cloud belum lengkap. Refresh / semak akses dahulu.');return;}v218EditId=null;v218NewId=crypto.randomUUID();v218Fill({date:V218.today(),kind:'out',villaId:'VILLA_1',category:'Cleaning'});}
 function v218Edit(id){const e=v218Manual.find(x=>x.id===id);if(!e)return;v218EditId=id;v218NewId=null;v218Fill(e);}
 function v218Fill(e){
