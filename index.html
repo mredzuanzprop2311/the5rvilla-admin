@@ -979,6 +979,30 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
 .v2171-metric.v21711-sd-held .l,.v2171-metric.v21711-sd-held .v,.v2171-metric.v21711-sd-held .s{color:#fff}
 .v2171-metric.v21711-sd-pending{background:#fff7ed;border-color:#fed7aa}.v2171-metric.v21711-sd-pending .v{color:#c2410c}
 @media(max-width:760px){#v21711ReservePanel .v21711-grid{grid-template-columns:1fr}#v21711ReservePanel .v21711-stat{min-height:0}#v21711ReservePanel .v21711-value{font-size:20px}}
+
+/* V2.23.4 — Protected Money compact */
+#v21711ReservePanel{padding:8px 10px!important;margin:8px 0 4px!important;border-radius:11px!important;border-left-width:3px!important;box-shadow:none!important}
+#v21711ReservePanel .v21711-compact{display:grid;grid-template-columns:minmax(140px,1.15fr) 120px minmax(190px,1.25fr) 130px auto;gap:8px;align-items:center}
+#v21711ReservePanel .v21711-compact-title{display:flex;align-items:center;gap:5px;min-width:0}
+#v21711ReservePanel .v21711-compact-title b{font-size:11px;color:#3b0764;white-space:nowrap}
+#v21711ReservePanel .v21711-compact-title small{font-size:9px;color:#7c3aed;white-space:nowrap}
+#v21711ReservePanel .v21711-compact-item,#v21711ReservePanel .v21711-compact-bank{display:flex;align-items:center;gap:6px;min-width:0}
+#v21711ReservePanel .v21711-compact-item>span,#v21711ReservePanel .v21711-compact-bank>span{font-size:9px;font-weight:900;text-transform:uppercase;color:#6b7280;white-space:nowrap}
+#v21711ReservePanel .v21711-compact-item strong{font-size:12px;font-weight:900;color:#3b0764;white-space:nowrap}
+#v21711ReservePanel .v21711-compact-item small{display:none}
+#v21711ReservePanel .v21711-inputrow{margin:0!important;gap:4px!important;flex:1}
+#v21711ReservePanel input{padding:5px 6px!important;font-size:11px!important;height:30px!important}
+#v21711ReservePanel button{padding:6px 8px!important;font-size:9px!important;height:30px!important}
+#v21711ReservePanel .v21711-status{padding:5px 7px!important;font-size:8px!important;white-space:nowrap}
+#v21711ReserveUpdated{font-size:8px!important;margin-top:4px!important}
+#v21711ReservePanel.safe .v21711-compact-title b,#v21711ReservePanel.safe .v21711-compact-item strong{color:#166534}
+#v21711ReservePanel.short .v21711-compact-title b,#v21711ReservePanel.short .v21711-compact-item strong{color:#991b1b}
+@media(max-width:760px){
+ #v21711ReservePanel .v21711-compact{grid-template-columns:1fr auto;gap:6px 8px}
+ #v21711ReservePanel .v21711-compact-title{grid-column:1/-1}
+ #v21711ReservePanel .v21711-compact-bank{grid-column:1/-1}
+ #v21711ReservePanel .v21711-status{justify-self:end}
+}
 </style>
 
 
@@ -5906,14 +5930,12 @@ function v21711EnsureReservePanel(){
  if(!panel){
   panel=document.createElement("div");panel.id="v21711ReservePanel";panel.className="unset";
   panel.innerHTML=`
-   <div class="v21711-top">
-    <div><div class="v21711-kicker">Protected Money</div><h4>🛡️ SECURITY DEPOSIT RESERVE</h4><div class="v21711-warning">Security Deposit bukan revenue. Duit ini perlu tersedia untuk refund guest.</div></div>
+   <div class="v21711-compact">
+    <div class="v21711-compact-title"><span>🛡️</span><b>Protected Money</b><small>SD Reserve</small></div>
+    <div class="v21711-compact-item"><span>Required</span><strong id="v21711Required">RM 0.00</strong></div>
+    <div class="v21711-compact-bank"><span>Bank</span><div class="v21711-inputrow"><input id="v21711BankInput" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"><button id="v21711SaveReserve" type="button">Save</button></div></div>
+    <div class="v21711-compact-item"><span>Difference</span><strong id="v21711Difference">—</strong><small id="v21711DifferenceSub"></small></div>
     <div id="v21711ReserveStatus" class="v21711-status">BELUM SET</div>
-   </div>
-   <div class="v21711-grid">
-    <div class="v21711-stat"><div class="v21711-label">Required Reserve</div><div id="v21711Required" class="v21711-value">RM 0.00</div><div class="v21711-sub">Jumlah SD yang masih dipegang dan belum direfund.</div></div>
-    <div class="v21711-stat"><div class="v21711-label">Bank SD Reserve</div><div class="v21711-inputrow"><input id="v21711BankInput" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"><button id="v21711SaveReserve" type="button">Save</button></div><div class="v21711-sub">Isi baki sebenar yang anda asingkan dalam bank untuk refund SD.</div></div>
-    <div class="v21711-stat"><div class="v21711-label">Reserve Difference</div><div id="v21711Difference" class="v21711-value">—</div><div id="v21711DifferenceSub" class="v21711-sub">Isi Bank SD Reserve untuk semakan.</div></div>
    </div>
    <div id="v21711ReserveUpdated">Bank reserve belum disimpan.</div>`;
   const platforms=$("v2171PlatformBreakdown");
@@ -11190,6 +11212,7 @@ setTimeout(()=>{
 window.THE5R_AUTO_GCAL_AND_DIRECT_RECON_VERSION="V2.23.2_AUTO_GCAL_DIRECT_RECON";
 
 window.THE5R_SD_COMPACT_VERSION="V2.23.3_SD_HELD_COMPACT_ROW";
+window.THE5R_PROTECTED_MONEY_COMPACT_VERSION="V2.23.4_PROTECTED_MONEY_COMPACT";
 </script>
 </body>
 </html>
