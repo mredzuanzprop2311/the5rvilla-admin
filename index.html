@@ -10776,6 +10776,59 @@ getTransactions=function(){
 
 
 
+// Pendapatan check-out untuk disemak dalam Cashflow.
+(function(){
+ const origin='https://afamosa-homestay-cashflow.mredzuanzprop.chatgpt.site';
+ const supported={'direct':'Direct','airbnb':'Airbnb','booking.com':'Booking.com','agoda':'Agoda','trip.com':'Trip.com'};
+ function candidate(b){
+  const platform=supported[String(b.platform||'Direct').trim().toLowerCase()];
+  const checkoutMs=V218.millis(b.checkOutAt),checkInMs=V218.millis(b.checkInAt),today=localTodayISO();
+  if(!platform||b.isTrashed||['cancelled','rejected','no show','no-show'].includes(String(b.status||'').toLowerCase()))return null;
+  if(!(checkoutMs>0&&checkInMs>0&&checkoutMs>=checkInMs)||String(b.checkOut||'')>today||checkoutMs>Date.now())return null;
+  const transactions=(b.transactions||[]).filter(t=>!v222IsVoided(t)&&t.date&&t.date<=today);
+  const originalTransactions=Array.isArray(b.transactions)?b.transactions:[];
+  const source=originalTransactions.length?{...b,totalIncoming:0,netPaid:0,totalRefund:0,amountPaid:0,securityDepositPaid:0}:b;
+  const math=v2213AuthoritativeDirectAllocation(source,transactions);
+  const rental=Math.round(Number(b.rent||0)*100)/100;
+  const paid=Math.round(Number(math.rentalOtherPaid||0)*100)/100;
+  const amount=platform==='Direct'?Math.min(rental,paid):Math.round(Number(b.platformNetPayoutExpected||0)*100)/100;
+  const paymentDates=transactions.filter(t=>v21710IncomingKind(b,t)==='rental').map(t=>t.date).sort();
+  const date=platform==='Direct'?(paymentDates.at(-1)||V218.today(new Date(checkoutMs))):String(b.platformPayoutDate||'').slice(0,10);
+  if(!(amount>0)||!date||date>today||(platform==='Direct'&&paid+0.001<rental))return null;
+  const nights=Math.round((Date.parse(b.checkOut)-Date.parse(b.checkIn))/86400000);
+  if(!Number.isInteger(nights)||nights<1)return null;
+  return {sourceOrigin:location.origin,bookingId:b.id,bookingNo:b.bookingNo||b.id,
+   villaId:b.villaId||'VILLA_1',guest:b.guestName||b.guest||'',platform,
+   checkIn:b.checkIn,checkOut:b.checkOut,checkoutAt:new Date(checkoutMs).toISOString(),
+   checkoutConfirmed:true,date,amount,rental,nights};
+ }
+ function render(){
+  const data=(bookingCache||[]).map(candidate).filter(Boolean).sort((a,b)=>b.checkOut.localeCompare(a.checkOut));
+  for(const id of ['v218CashbookPanel','v214CompletedPanel']){
+   const parent=document.getElementById(id);if(!parent)continue;
+   let host=parent.querySelector('[data-income-review]');
+   if(!host){host=document.createElement('section');host.dataset.incomeReview='true';parent.prepend(host);}
+   host.style.cssText='padding:16px;margin:16px 0;background:#eff8ff;border:1px solid #bfdbfe;border-radius:14px;overflow-wrap:anywhere';
+   host.innerHTML='<h3>Pendapatan selepas check-out → Cashflow</h3><p>Semak penerimaan sewa / net pay dalam Cashflow, kemudian tekan Sahkan & Masukkan.</p><p>'+data.length+' booking sedia disemak. Sewa Direct mesti lengkap. Platform memerlukan net pay dan tarikh payout.</p>'+
+    data.map(b=>'<details style="background:white;border-radius:10px;padding:12px;margin:10px 0"><summary>'+esc(b.guest)+' · '+esc(b.bookingNo)+' · '+esc(b.platform)+' · RM '+b.amount.toFixed(2)+'</summary><p>'+esc(b.checkIn)+' hingga '+esc(b.checkOut)+' · '+b.nights+' malam</p><p>Tarikh pendapatan '+esc(b.date)+'</p><button type="button" class="blue" data-review-income="'+esc(b.bookingId)+'" style="width:100%;min-height:48px;white-space:normal">Semak & Masukkan ke Cashflow</button></details>').join('');
+   host.querySelectorAll('[data-review-income]').forEach(button=>button.onclick=()=>{
+    const booking=(bookingCache||[]).find(b=>b.id===button.dataset.reviewIncome),draft=booking&&candidate(booking);
+    if(!draft){alert('Booking berubah. Semak check-out, jumlah sewa atau tarikh payout dahulu.');render();return;}
+    const url=origin+'/#5r-booking-income='+encodeURIComponent(JSON.stringify([draft]));
+    window.open(url,'_blank','noopener,noreferrer');
+   });
+  }
+ }
+ const baseLoad=load;
+ load=async function(...args){const result=await baseLoad.apply(this,args);render();return result;};
+ const baseTab=v214ActivateTab;
+ v214ActivateTab=function(name){const result=baseTab(name);if(['cashbook','completed'].includes(name))render();return result;};
+ window.v214ActivateTab=v214ActivateTab;
+ window.THE5R_INCOME_REVIEW_VERSION='V2.24_CHECKOUT_CASHFLOW_REVIEW';
+ window.VillaBookingIncome={candidate,render};
+ render();
+})();
+
 </script>
 
 <!-- THE 5R VILLA ADMIN V5 ADDON -->
