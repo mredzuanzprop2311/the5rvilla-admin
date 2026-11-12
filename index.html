@@ -6866,7 +6866,7 @@ const v218Money=n=>'RM '+(Number(n||0)/100).toLocaleString('en-MY',{minimumFract
 const v218Clone=v=>JSON.parse(JSON.stringify(v,(k,x)=>typeof x?.toDate==='function'?x.toDate().toISOString():x));
 function v218Actor(){const u=auth.currentUser;if(!u)throw Error('Admin login diperlukan.');return {uid:u.uid,admin:u.email||u.uid};}
 function v218Financial(ref){return ['bookings','cashbookEntries'].includes(ref.path.split('/')[0])||ref.path==='settings/sdReserve';}
-function v218Snapshot(d){if(!d)return null;const fields=['bookingNo','villaId','platform','checkIn','checkOut','transactions','rent','securityDeposit','amountPaid','securityDepositPaid','platformNetPayoutExpected','platformPayoutDate','securityDepositReceived','securityDepositRefunded','securityDepositPaid','totalIncoming','totalRefund','netPaid','stayStatus','lifecycleStatus','refundStatus','isTrashed','status','checkInAt','checkOutAt','inspectionStatus','refundApproved','refundApprovedAmount','refundProcessed','refundTimestamp','financialVersion','date','kind','category','amountSen','note','reference','bookingId','amount','voidReason'];const out={};fields.forEach(k=>{if(d[k]!==undefined)out[k]=v218Clone(d[k]);});return out;}
+function v218Snapshot(d){if(!d)return null;const fields=['bookingNo','villaId','platform','checkIn','checkOut','cashflowReview','transactions','rent','securityDeposit','amountPaid','securityDepositPaid','platformNetPayoutExpected','platformPayoutDate','securityDepositReceived','securityDepositRefunded','securityDepositPaid','totalIncoming','totalRefund','netPaid','stayStatus','lifecycleStatus','refundStatus','isTrashed','status','checkInAt','checkOutAt','inspectionStatus','refundApproved','refundApprovedAmount','refundProcessed','refundTimestamp','financialVersion','date','kind','category','amountSen','note','reference','bookingId','amount','voidReason'];const out={};fields.forEach(k=>{if(d[k]!==undefined)out[k]=v218Clone(d[k]);});return out;}
 function v218TxKey(t){
  const x=t||{};
  return [
@@ -10807,18 +10807,73 @@ getTransactions=function(){
    checkIn:b.checkIn,checkOut:b.checkOut,checkoutAt:new Date(checkoutMs).toISOString(),
    checkoutConfirmed:true,date,amount,rental,nights};
  }
+ const pendingSaves=new Set();
+ function openDoneDialog(booking){
+  const dialog=document.createElement('dialog');
+  dialog.style.cssText='width:min(440px,calc(100% - 32px));border:1px solid #bfdbfe;border-radius:14px;padding:20px;color:#172033';
+  dialog.setAttribute('aria-labelledby','cashflow-done-title');
+  dialog.innerHTML=`<form>
+   <h3 id="cashflow-done-title">Tandakan Cashflow Done</h3>
+   <p>${esc(booking.guestName||booking.guest||'')} · ${esc(booking.bookingNo||booking.id)}</p>
+   <p>Sahkan pendapatan booking ini sudah direkod dalam Cashflow.</p>
+   <label>Catatan / rujukan Cashflow (pilihan)<textarea rows="3" maxlength="250" style="width:100%"></textarea></label>
+   <p role="alert" hidden></p>
+   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    <button type="button" class="gray">Batal</button>
+    <button type="submit" class="blue">Simpan Done</button>
+   </div>
+  </form>`;
+  const form=dialog.querySelector('form'),cancel=form.querySelector('[type="button"]');
+  const save=form.querySelector('[type="submit"]'),remark=form.querySelector('textarea'),error=form.querySelector('[role="alert"]');
+  remark.value=booking.cashflowReview?.remark||'';
+  cancel.onclick=()=>dialog.close();
+  dialog.addEventListener('cancel',event=>{if(pendingSaves.has(booking.id))event.preventDefault();});
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  form.onsubmit=async event=>{
+   event.preventDefault();
+   if(pendingSaves.has(booking.id))return;
+   pendingSaves.add(booking.id);
+   save.disabled=cancel.disabled=true;
+   error.hidden=true;
+   try{
+    const cashflowReview={status:'done',remark:remark.value.trim(),confirmedAt:booking.cashflowReview?.confirmedAt||new Date().toISOString()};
+    await updateDoc(doc(db,'bookings',booking.id),{cashflowReview});
+    const current=(bookingCache||[]).find(b=>b.id===booking.id);
+    if(current)current.cashflowReview=cashflowReview;
+    dialog.close();
+    render();
+   }catch(e){
+    error.textContent='Status belum disimpan. '+(e?.message||e);
+    error.hidden=false;
+   }finally{
+    pendingSaves.delete(booking.id);
+    save.disabled=cancel.disabled=false;
+   }
+  };
+  document.body.appendChild(dialog);
+  dialog.showModal();
+ }
  function render(){
-  const data=(bookingCache||[]).map(candidate).filter(Boolean).sort((a,b)=>b.checkOut.localeCompare(a.checkOut));
+  const bookings=bookingCache||[];
+  const done=bookings.filter(b=>b.cashflowReview?.status==='done').sort((a,b)=>String(b.cashflowReview.confirmedAt).localeCompare(String(a.cashflowReview.confirmedAt)));
+  const data=bookings.filter(b=>b.cashflowReview?.status!=='done').map(candidate).filter(Boolean).sort((a,b)=>b.checkOut.localeCompare(a.checkOut));
   for(const id of ['v218CashbookPanel','v214CompletedPanel']){
    const parent=document.getElementById(id);if(!parent)continue;
    let host=parent.querySelector('[data-income-review]');
    if(!host){host=document.createElement('section');host.dataset.incomeReview='true';parent.prepend(host);}
    host.style.cssText='padding:16px;margin:16px 0;background:#eff8ff;border:1px solid #bfdbfe;border-radius:14px;overflow-wrap:anywhere';
-   host.innerHTML='<h3>Pendapatan selepas check-out → Cashflow</h3><p>Semak penerimaan sewa / net pay dalam Cashflow, kemudian tekan Sahkan & Masukkan.</p><p>'+data.length+' booking sedia disemak. Sewa Direct mesti lengkap. Platform memerlukan net pay dan tarikh payout.</p>'+
-    data.map(b=>'<details style="background:white;border-radius:10px;padding:12px;margin:10px 0"><summary>'+esc(b.guest)+' · '+esc(b.bookingNo)+' · '+esc(b.platform)+' · RM '+b.amount.toFixed(2)+'</summary><p>'+esc(b.checkIn)+' hingga '+esc(b.checkOut)+' · '+b.nights+' malam</p><p>Tarikh pendapatan '+esc(b.date)+'</p><button type="button" class="blue" data-review-income="'+esc(b.bookingId)+'" style="width:100%;min-height:48px;white-space:normal">Semak & Masukkan ke Cashflow</button></details>').join('');
+   const doneWasOpen=host.querySelector('[data-cashflow-done-list]')?.open;
+   host.innerHTML='<h3>Pendapatan selepas check-out → Cashflow</h3><p>Jika pendapatan sudah direkod dalam Cashflow, tekan Tandakan Done.</p><p>'+data.length+' booking sedia disemak.</p>'+
+    data.map(b=>'<details style="background:white;border-radius:10px;padding:12px;margin:10px 0"><summary>'+esc(b.guest)+' · '+esc(b.bookingNo)+' · '+esc(b.platform)+' · RM '+b.amount.toFixed(2)+'</summary><p>'+esc(b.checkIn)+' hingga '+esc(b.checkOut)+' · '+b.nights+' malam</p><p>Tarikh pendapatan '+esc(b.date)+'</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="blue" data-review-income="'+esc(b.bookingId)+'">Semak & Masukkan ke Cashflow</button><button type="button" class="gray" data-mark-cashflow-done="'+esc(b.bookingId)+'">Tandakan Done</button></div></details>').join('')+
+    '<details data-cashflow-done-list '+(doneWasOpen?'open':'')+' style="background:white;border-radius:10px;padding:12px;margin:10px 0"><summary>Sudah masuk Cashflow · '+done.length+'</summary>'+
+    (done.length?done.map(b=>'<div style="padding:10px 0;border-bottom:1px solid #e2e8f0"><strong>✓ Done · '+esc(b.guestName||b.guest||'')+' · '+esc(b.bookingNo||b.id)+'</strong>'+(b.cashflowReview.remark?'<p>'+esc(b.cashflowReview.remark)+'</p>':'')+'<button type="button" class="gray" data-mark-cashflow-done="'+esc(b.id)+'">Edit catatan</button></div>').join(''):'<p>Tiada booking ditandakan Done.</p>')+'</details>';
+   host.querySelectorAll('[data-mark-cashflow-done]').forEach(button=>button.onclick=()=>{
+    const booking=(bookingCache||[]).find(b=>b.id===button.dataset.markCashflowDone);
+    if(booking)openDoneDialog(booking);
+   });
    host.querySelectorAll('[data-review-income]').forEach(button=>button.onclick=()=>{
-    const booking=(bookingCache||[]).find(b=>b.id===button.dataset.reviewIncome),draft=booking&&candidate(booking);
-    if(!draft){alert('Booking berubah. Semak check-out, jumlah sewa atau tarikh payout dahulu.');render();return;}
+    const booking=(bookingCache||[]).find(b=>b.id===button.dataset.reviewIncome),draft=booking?.cashflowReview?.status!=='done'&&booking&&candidate(booking);
+    if(!draft){alert('Booking berubah. Semak status Cashflow, check-out atau bayaran dahulu.');render();return;}
     const url=origin+'/#5r-booking-income='+encodeURIComponent(JSON.stringify([draft]));
     window.open(url,'_blank','noopener,noreferrer');
    });
