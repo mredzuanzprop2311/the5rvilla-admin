@@ -7066,7 +7066,7 @@ function v222DirectRows(b){
  function push(date,type,amount,note){
   const sen=v222Sen(amount); if(sen<=0)return;
   rows.push({
-   date,type,amountSen:sen,
+   date,checkIn:v222Date(b.checkIn),type,amountSen:sen,
    account:v222AccountFor(date,type),
    bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",
    platform:b.platform||"Direct",note:note||""
@@ -7082,7 +7082,7 @@ function v222DirectRows(b){
    continue;
   }
 
-  if(typ==="Booking Payment"||typ==="Security Deposit"){
+  if(v21710IncomingKind(b,t)==="deposit"){
    const toSd=Math.min(amount,sdRemain);
    if(toSd>0){push(date,"sd",toSd,t.note||typ);sdRemain-=toSd;}
    const extra=Math.max(0,amount-toSd);
@@ -7133,9 +7133,9 @@ function v222PlatformDepositRows(b){
   const date=v222Date(t.date),amount=Math.max(0,Number(t.amount||0)),typ=String(t.type||"");
   if(!date||!amount)continue;
   if(typ==="Refund"){
-   rows.push({date,type:"refund",amountSen:v222Sen(amount),account:v222AccountFor(date,"refund"),bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",platform:b.platform||"",note:t.note||"Security Deposit Refund"});
+   rows.push({date,checkIn:v222Date(b.checkIn),type:"refund",amountSen:v222Sen(amount),account:v222AccountFor(date,"refund"),bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",platform:b.platform||"",note:t.note||"Security Deposit Refund"});
   }else if(typ==="Security Deposit"||typ==="Booking Payment"){
-   rows.push({date,type:"sd",amountSen:v222Sen(amount),account:v222AccountFor(date,"sd"),bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",platform:b.platform||"",note:t.note||"Security Deposit"});
+   rows.push({date,checkIn:v222Date(b.checkIn),type:"sd",amountSen:v222Sen(amount),account:v222AccountFor(date,"sd"),bookingNo:v222BookingRef(b),guest:b.guestName||b.guest||"",platform:b.platform||"",note:t.note||"Security Deposit"});
   }
  }
  return rows;
@@ -7163,6 +7163,7 @@ function v222PlatformBookingNetPayRows(){
 
   rows.push({
    date,
+   checkIn:v222Date(b.checkIn),
    type:"rental",
    amountSen:v222Sen(amount),
    account:v222AccountFor(date,"rental"),
@@ -7176,13 +7177,13 @@ function v222PlatformBookingNetPayRows(){
 }
 
 function v222ManualRentalRows(){
- const bookings=new Map((v218Bookings||[]).map(b=>[b.id,b]));
+ const bookings=new Map((v218Bookings||[]).filter(Boolean).map(b=>[String(b.id),b]));
  return (v218Manual||[]).filter(e=>e&&e.status!=="void"&&e.kind==="in"&&e.date&&Number(e.amountSen||0)>0)
   .filter(e=>!["Security Deposit","Security Deposit Refund"].includes(String(e.category||"")))
   .map(e=>{
-   const b=bookings.get(e.bookingId)||{};
+   const b=bookings.get(String(e.bookingId))||{};
    return {
-    date:v222Date(e.date),type:"rental",amountSen:Number(e.amountSen||0),
+    date:v222Date(e.date),checkIn:v222Date(b.checkIn),type:"rental",amountSen:Number(e.amountSen||0),
     account:v222AccountFor(v222Date(e.date),"rental"),
     bookingNo:b.bookingNo||e.bookingId||"-",guest:b.guestName||b.guest||"",
     platform:b.platform||e.category||"",note:e.note||e.reference||e.category||""
@@ -7200,21 +7201,23 @@ function v222Rows(){
  }
  rows.push(...v222PlatformBookingNetPayRows());
  rows.push(...v222ManualRentalRows());
- return rows.sort((a,b)=>a.date.localeCompare(b.date)||String(a.bookingNo).localeCompare(String(b.bookingNo)));
+ return rows.sort((a,b)=>v222ReportDate(a).localeCompare(v222ReportDate(b))||a.date.localeCompare(b.date)||String(a.bookingNo).localeCompare(String(b.bookingNo)));
 }
+function v222ReportDate(row){return row.checkIn||row.date;}
 function v222FilterRows(){
  const y=$("v222Year")?.value||String(new Date().getFullYear());
  const m=$("v222Month")?.value||"all";
  return v222Rows().filter(r=>{
-  if(!r.date.startsWith(y+"-"))return false;
-  if(m!=="all"&&!r.date.startsWith(`${y}-${m}`))return false;
+  const date=v222ReportDate(r);
+  if(!date.startsWith(y+"-"))return false;
+  if(m!=="all"&&!date.startsWith(`${y}-${m}`))return false;
   return true;
  });
 }
 function v222TypeLabel(t){return t==="rental"?"Rental / Sewa":t==="sd"?"Security Deposit":"SD Refund";}
 function v222Pill(t){return `<span class="v222-pill ${t}">${esc(v222TypeLabel(t))}</span>`;}
 function v222RowHtml(r){
- return `<tr><td>${esc(r.date)}</td><td>${esc(r.guest||"-")}</td><td>${esc(r.bookingNo||"-")}</td><td>${esc(r.platform||"-")}</td><td>${v222Pill(r.type)}</td><td>${esc(r.account)}</td><td class="amt">${v222Rm(r.amountSen)}</td><td>${esc(r.note||"")}</td></tr>`;
+ return `<tr><td>${esc(r.checkIn||"—")}</td><td>${esc(r.guest||"-")}</td><td>${esc(r.bookingNo||"-")}</td><td>${esc(r.platform||"-")}</td><td>${v222Pill(r.type)}</td><td>${esc(r.account)}</td><td class="amt">${v222Rm(r.amountSen)}</td><td>${esc(r.note||"")}</td><td>${esc(r.date)}</td></tr>`;
 }
 function v222ToggleSdPocket(){
  const p=$("v222SdPocket");if(!p)return;
@@ -7236,14 +7239,14 @@ function v222Render(){
 
  const sum=a=>a.reduce((s,r)=>s+Number(r.amountSen||0),0);
  const rentSen=sum(rentalRows);
- const sdInSen=sum(depositIn.filter(r=>r.account===V222_DEPOSIT_ACCOUNT));
- const sdOutSen=sum(depositOut.filter(r=>r.account===V222_DEPOSIT_ACCOUNT));
+ const sdInSen=sum(depositIn);
+ const sdOutSen=sum(depositOut);
  const heldSen=Math.max(0,sdInSen-sdOutSen);
 
  const mkAccount=(title,cls,arr,totalLabel,totalSen)=>{
   return `<div class="v222-account ${cls||""}">
    <div class="v222-account-head"><span>${esc(title)}</span><span>${esc(totalLabel)}: ${v222Rm(totalSen)}</span></div>
-   ${arr.length?`<div class="v222-table-wrap"><table class="v222-table"><thead><tr><th>Tarikh</th><th>Guest</th><th>Booking No</th><th>Platform</th><th>Jenis</th><th>Akaun</th><th>Amaun</th><th>Catatan</th></tr></thead><tbody>${arr.map(v222RowHtml).join("")}</tbody></table></div>`:`<div class="v222-empty">Tiada transaksi untuk pilihan ini.</div>`}
+   ${arr.length?`<div class="v222-table-wrap"><table class="v222-table"><thead><tr><th>Check-in</th><th>Guest</th><th>Booking No</th><th>Platform</th><th>Jenis</th><th>Akaun</th><th>Amaun</th><th>Catatan</th><th>Tarikh transaksi</th></tr></thead><tbody>${arr.map(v222RowHtml).join("")}</tbody></table></div>`:`<div class="v222-empty">Tiada transaksi untuk pilihan ini.</div>`}
   </div>`;
  };
 
@@ -7280,9 +7283,9 @@ function v222Print(){
  </style></head><body>
  <h1>5R SOLUTION • THE 5R VILLA</h1><h2>LAPORAN RENTAL / NET PAY — ${esc(period)}</h2>
  <div class="box"><b>Rental / Net Pay → Maybank</b><br><strong>${v222Rm(rent)}</strong></div>
- <table><thead><tr><th>Tarikh</th><th>Guest</th><th>Booking</th><th>Platform</th><th>Jenis</th><th>Akaun</th><th>Amaun</th></tr></thead>
- <tbody>${rows.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.guest||"-")}</td><td>${esc(r.bookingNo||"-")}</td><td>${esc(r.platform||"-")}</td><td>${esc(v222TypeLabel(r.type))}</td><td>${esc(r.account)}</td><td class="r">${v222Rm(r.amountSen)}</td></tr>`).join("")}</tbody></table>
- <div class="note">Security Deposit tidak dimasukkan dalam laporan utama ini. SD dipantau secara berasingan melalui Security Deposit Pocket dalam Admin.</div>
+ <table><thead><tr><th>Check-in</th><th>Guest</th><th>Booking</th><th>Platform</th><th>Jenis</th><th>Akaun</th><th>Amaun</th><th>Tarikh transaksi</th></tr></thead>
+ <tbody>${rows.map(r=>`<tr><td>${esc(r.checkIn||"—")}</td><td>${esc(r.guest||"-")}</td><td>${esc(r.bookingNo||"-")}</td><td>${esc(r.platform||"-")}</td><td>${esc(v222TypeLabel(r.type))}</td><td>${esc(r.account)}</td><td class="r">${v222Rm(r.amountSen)}</td><td>${esc(r.date)}</td></tr>`).join("")}</tbody></table>
+ <div class="note">Laporan ikut tarikh check-in. Rekod tanpa tarikh check-in ikut tarikh transaksi. Security Deposit dipantau dalam Security Deposit Pocket.</div>
  <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
  const w=window.open("","_blank","noopener,noreferrer");
  if(!w){alert("Popup disekat. Benarkan popup untuk Save PDF.");return;}
@@ -7291,17 +7294,18 @@ function v222Print(){
 function v222Setup(){
  if($("v222PaymentReport")||!$("v218CashbookPanel"))return;
  const years=[];
- const nowY=new Date().getFullYear();
+ const [year,month]=V218.today().split("-");
+ const nowY=Number(year);
  for(let y=2024;y<=Math.max(2030,nowY+3);y++)years.push(y);
  const months=["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
  $("v218CashbookPanel").insertAdjacentHTML("afterbegin",`
  <section id="v222PaymentReport" class="v222-report">
   <div class="v222-head">
-   <div><h3>🏦 LAPORAN BAYARAN & AKAUN</h3><div class="v222-sub">Fokus laporan utama ialah Rental / Net Pay yang masuk ke 5R Maybank. Security Deposit diasingkan dalam pocket berasingan. Polisi baharu bermula <b>22/10/2026</b>.</div></div>
+   <div><h3>🏦 LAPORAN BAYARAN & AKAUN</h3><div class="v222-sub">Laporan ikut tarikh check-in. Rekod tanpa tarikh check-in ikut tarikh transaksi. Security Deposit dipaparkan dalam pocket berasingan. Polisi baharu bermula <b>22/10/2026</b>.</div></div>
   </div>
   <div class="v222-controls">
-   <label>Tahun<select id="v222Year">${years.map(y=>`<option value="${y}" ${y===2026?"selected":""}>${y}</option>`).join("")}</select></label>
-   <label>Bulan<select id="v222Month"><option value="all">Semua Bulan</option>${months.map((n,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${i===9?"selected":""}>${n}</option>`).join("")}</select></label>
+   <label>Tahun<select id="v222Year">${years.map(y=>`<option value="${y}" ${y===nowY?"selected":""}>${y}</option>`).join("")}</select></label>
+   <label>Bulan check-in<select id="v222Month"><option value="all">Semua Bulan</option>${months.map((n,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${i+1===Number(month)?"selected":""}>${n}</option>`).join("")}</select></label>
    <button type="button" class="gray" onclick="v222Render()">Papar</button>
    <button type="button" class="blue" onclick="v222Print()">SAVE PDF</button>
   </div>
