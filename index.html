@@ -5167,6 +5167,14 @@ const V2172_CAL_SOURCES=[
  {key:"airbnb",platform:"Airbnb",label:"Airbnb",short:"A",cls:"airbnb"}
 ];
 let v2172ExternalCalendarCache=[];
+let v2172CalendarFeedState={status:"pending",lastSuccessAt:"",error:""};
+let v2172CalendarCacheRequest=0;
+let v2172SyncInFlight=null;
+
+function v2172IsAirbnbBlock(data){
+ const platform=String(data?.calendarPlatform||data?.platform||data?.source||"").trim().toLowerCase();
+ return platform==="airbnb" && !!data.checkIn && !!data.checkOut;
+}
 
 function v2172SourceMeta(platform){
  const p=String(platform||"").toLowerCase();
@@ -5208,13 +5216,26 @@ function v2172ParseIcal(ics,platform){
 }
 
 async function v2172LoadExternalCalendarCache(){
+ const requestId=++v2172CalendarCacheRequest;
  try{
-  const snap=await getDocs(collection(db,"publicAvailability"));const arr=[];
-  snap.forEach(ds=>{const d=ds.data()||{};const p=String(d.calendarPlatform||d.platform||"").toLowerCase();if(d.icalManaged===true&&p==="airbnb"&&d.checkIn&&d.checkOut)arr.push({id:ds.id,...d});});
-  v2172ExternalCalendarCache=arr;
-  v2169RenderMiniCalendar();
-  return arr;
- }catch(e){console.warn("External calendar cache load gagal",e);return v2172ExternalCalendarCache;}
+  const snap=await getDocs(collection(db,"publicAvailability"));
+  const managed=[],legacy=[];
+  snap.forEach(ds=>{
+   const data=ds.data()||{};
+   if(!v2172IsAirbnbBlock(data))return;
+   const row={...data,id:ds.id};
+   (data.icalManaged===true?managed:legacy).push(row);
+  });
+  // A fresh feed takes precedence over historical mirrored records and older reads.
+  if(requestId===v2172CalendarCacheRequest && !v2172CalendarFeedState.lastSuccessAt){
+   v2172ExternalCalendarCache=managed.length?managed:legacy;
+   v2169RenderMiniCalendar();
+  }
+  return v2172ExternalCalendarCache;
+ }catch(e){
+  console.warn("External calendar cache load gagal",e);
+  return v2172ExternalCalendarCache;
+ }
 }
 
 async function v2175PurgeRemovedOtaBlocks(){
@@ -5235,7 +5256,7 @@ window.v2175PurgeRemovedOtaBlocks=v2175PurgeRemovedOtaBlocks;
 async function v2172FetchFeed(source){
  if(location.protocol==="file:")throw new Error("Preview mode: Airbnb sync hanya aktif selepas deploy HTTPS.");
  const q=`platform=${encodeURIComponent(source.key)}`;
- const onCloudflare=/\.pages\.dev$/i.test(location.hostname||"");
+ const onCloudflare=!/\.netlify\.app$/i.test(location.hostname||"");
  const endpoints=onCloudflare
   ? [`/api/calendar-feed?${q}`,`/.netlify/functions/calendar-feed?${q}`]
   : [`/.netlify/functions/calendar-feed?${q}`,`/api/calendar-feed?${q}`];
@@ -5256,6 +5277,20 @@ async function v2172SyncOne(source){
  if(card)card.className="v2172-source syncing";if(meta)meta.textContent="Sedang sync…";
  const ics=await v2172FetchFeed(source);
  const events=v2172ParseIcal(ics,source.platform);
+ const eventBlocks=String(ics).split("BEGIN:VEVENT").slice(1);
+ const expectedEvents=eventBlocks.filter(block=>!/^STATUS:CANCELLED\s*$/im.test(block));
+ const today=localTodayISO();
+ const hasFutureBookings=(Array.isArray(bookingCache)?bookingCache:[]).some(b=>
+  String(b.platform||"").trim().toLowerCase()==="airbnb" &&
+  !["cancelled","rejected"].includes(String(b.status||"").toLowerCase()) &&
+  !b.isTrashed && String(b.checkOut||"").slice(0,10)>today
+ );
+ const hasInvalidEvent=expectedEvents.some(block=>
+  !v2172ParseIcal("BEGIN:VCALENDAR\nBEGIN:VEVENT"+block,source.platform).length
+ );
+ if(hasInvalidEvent || (!events.length&&hasFutureBookings)){
+  throw new Error("Feed Airbnb kosong atau tarikh tidak sah sedangkan booking masih aktif. Data terakhir dikekalkan untuk semakan.");
+ }
  // Safety: only remove old records for this source after a successful fetch + parse.
  const snap=await getDocs(collection(db,"publicAvailability"));const old=[];
  snap.forEach(ds=>{const d=ds.data()||{};if(d.icalManaged===true&&String(d.calendarPlatform||d.platform||"")===source.platform)old.push(ds.id);});
@@ -5269,24 +5304,42 @@ async function v2172SyncOne(source){
   },{merge:false});
  }
  let removed=0;for(const id of old){if(!live.has(id)){await deleteDoc(doc(db,"publicAvailability",id));removed++;}}
+ ++v2172CalendarCacheRequest;
+ v2172ExternalCalendarCache=events;
+ v2172CalendarFeedState={status:"ready",lastSuccessAt:new Date().toISOString(),error:""};
+ v2169RenderMiniCalendar();
  if(card)card.className="v2172-source ok";if(meta)meta.textContent=`${events.length} blok aktif • ${removed} lama dibuang`;
  return{platform:source.platform,active:events.length,removed};
 }
 
 async function v2172SyncAllCalendars(showAlert=true){
+ if(v2172SyncInFlight)return v2172SyncInFlight;
+ v2172SyncInFlight=v2172RunCalendarSync(showAlert);
+ try{return await v2172SyncInFlight;}
+ finally{v2172SyncInFlight=null;}
+}
+
+async function v2172RunCalendarSync(showAlert){
+ v2172CalendarFeedState.status="syncing";
  const st=$("v2172CalendarStatus");if(st){st.className="v2172-status";st.textContent="Sync Airbnb calendar sedang berjalan…";}
  const results=[],errors=[];
  for(const source of V2172_CAL_SOURCES){
   try{results.push(await v2172SyncOne(source));}
   catch(e){errors.push({platform:source.platform,error:e?.message||String(e)});const card=$("v2172Src_"+source.key),meta=$("v2172Meta_"+source.key);if(card)card.className="v2172-source err";if(meta)meta.textContent="Gagal: "+(e?.message||e);}
  }
- await v2172LoadExternalCalendarCache();
+ if(errors.length){
+  v2172CalendarFeedState.status="error";
+  v2172CalendarFeedState.error=errors.map(x=>x.error).join(" / ");
+ }
  if(st){
   const total=results.reduce((s,x)=>s+x.active,0);
   st.className="v2172-status "+(errors.length?"err":"ok");
   st.textContent=errors.length?`Sync selesai sebahagian: ${results.length}/1 berjaya • ${total} blok aktif • ${errors.length} gagal`:`✅ Airbnb calendar synced • ${total} blok aktif`;
  }
- if(showAlert){if(errors.length)alert("Airbnb calendar sync gagal. Semak status feed.");else alert("Airbnb calendar berjaya sync.");}
+ if(showAlert){
+  if(errors.length)alert("Airbnb sync gagal. Data terakhir dikekalkan.\n"+v2172CalendarFeedState.error);
+  else alert(`Airbnb calendar berjaya sync • ${v2172ExternalCalendarCache.length} blok aktif.`);
+ }
  return{results,errors};
 }
 window.v2172SyncAllCalendars=v2172SyncAllCalendars;
@@ -8913,6 +8966,7 @@ window.THE5R_DASHBOARD_CLEAN_VERSION="V2.19.4_14DAY_TALLY";
 // ============================================================
 
 function v2195MonthIssues(monthKey){
+ if(v2172CalendarFeedState.status!=="ready")return [];
  if(!v2204InWindowKey(monthKey))return [];
  const today=localTodayISO();
  const events=(typeof v2192CurrentEvents==="function"?v2192CurrentEvents():[])
@@ -8961,6 +9015,10 @@ function v2195MonthIssues(monthKey){
 }
 
 function v2195OpenMonthIssues(monthKey){
+ if(v2172CalendarFeedState.status!=="ready"){
+  alert("Padanan belum disahkan. Jalankan SYNC & CHECK AIRBNB dahulu.");
+  return;
+ }
  const issues=v2195MonthIssues(monthKey);
  if(!issues.length){alert("Bulan ini sudah TALLY. Tiada error untuk disemak.");return;}
  const [y,m]=monthKey.split("-").map(Number);
@@ -9336,6 +9394,14 @@ function v2197RefreshNavHealth(){
 
  // Upcoming = all current/future range mismatches, missing/extra Airbnb records.
  v2197SetBadge(upBadge,globalCount,"Upcoming / tarikh");
+ if(v2172CalendarFeedState.status!=="ready"){
+  [dashBadge,upBadge].forEach(b=>{
+   if(!b)return;
+   b.className="v2197-health amber";
+   b.textContent="?";
+   b.title="Padanan Airbnb menunggu sync yang berjaya";
+  });
+ }
 
  // Existing request number badge is preserved; make it green when zero for quick status reading.
  const old=$("v214RequestBadge");
@@ -10054,7 +10120,7 @@ let v2192MonitorState={snapshot:[],changes:[],lastComparedAt:"",bootstrappedAt:"
 let v2192MonitorLoaded=false;
 
 function v2192Iso(v){return String(v||"").slice(0,10);}
-function v2192EventKey(x){return String(x?.id||`${v2192Iso(x?.checkIn)}_${v2192Iso(x?.checkOut)}`);}
+function v2192EventKey(x){return `${v2192Iso(x?.checkIn)}_${v2192Iso(x?.checkOut)}`;}
 function v2192CleanEvent(x){
  return {id:v2192EventKey(x),checkIn:v2192Iso(x?.checkIn),checkOut:v2192Iso(x?.checkOut),platform:"Airbnb"};
 }
@@ -10185,39 +10251,29 @@ function v2192Monthly(){
    !["cancelled","rejected"].includes(String(b.status||"").toLowerCase())
   );
   const ical=iCalRows.length,adminCount=adminRows.length;
-
-  // Range-aware monthly reconciliation:
-  // exact Check-in→Check-out pairs cancel each other out.
-  const remainingIcal=[...iCalRows];
-  const remainingAdmin=[...adminRows];
-  const matchedIcal=new Set(),matchedAdmin=new Set();
-
-  remainingIcal.forEach((e,ei)=>{
-   const eIn=String(e.checkIn||"").slice(0,10),eOut=String(e.checkOut||"").slice(0,10);
-   const ai=remainingAdmin.findIndex((b,idx)=>{
-    if(matchedAdmin.has(idx))return false;
-    const bIn=String(b.checkIn||"").slice(0,10),bOut=String(b.checkOut||"").slice(0,10);
-    const p=String(b.platform||"").trim().toLowerCase();
-    if(p==="direct")return v2194Overlap(eIn,eOut,bIn,bOut);
-    return bIn===eIn && bOut===eOut;
-   });
-   if(ai>=0){matchedIcal.add(ei);matchedAdmin.add(ai);}
-  });
-
-  let unmatchedIcal=remainingIcal.filter((_,i)=>!matchedIcal.has(i));
-  const unmatchedAdmin=remainingAdmin.filter((_,i)=>!matchedAdmin.has(i));
-  const reqs=(Array.isArray(pendingRequestCache)?pendingRequestCache:[]).filter(r=>{
-   const st=typeof requestStage==="function"?requestStage(r.status):String(r.status||"").toUpperCase();
-   return !["CONVERTED","REJECTED"].includes(String(st).toUpperCase());
-  });
-  unmatchedIcal=unmatchedIcal.filter(e=>!reqs.some(r=>String(r.checkIn||"").slice(0,10)===String(e.checkIn||"").slice(0,10)&&String(r.checkOut||"").slice(0,10)===String(e.checkOut||"").slice(0,10)));
-  const needCheck=Math.max(unmatchedIcal.length,unmatchedAdmin.length);
+  const needCheck=v2195MonthIssues(k).filter(x=>x.type!=="REQUEST_PENDING").length;
 
   return {key:k,ical,admin:adminCount,needCheck,ok:needCheck===0};
  });
 }
 function v2192OpenChanges(){
- return (v2192MonitorState.changes||[]).filter(x=>String(x.status||"OPEN")==="OPEN");
+ if(v2172CalendarFeedState.status!=="ready")return [];
+ const current=new Set(v2192CurrentEvents().map(v2192EventKey));
+ const seen=new Set();
+ return (v2192MonitorState.changes||[]).filter(x=>{
+  if(String(x.status||"OPEN")!=="OPEN" || !v2204InWindowKey(v2192MonthKey(x.checkIn)))return false;
+  if(v2192Iso(x.checkOut)<=localTodayISO())return false;
+  const range=v2192EventKey(x),key=`${x.type}|${range}`;
+  if(seen.has(key))return false;
+  if(x.type==="REMOVED" && current.has(range))return false;
+  if(x.type==="NEW"){
+   if(!current.has(range))return false;
+   const classified=v2194ClassifyExternal(x);
+   if(["TALLY","TALLY_DIRECT","MANUAL_CLOSE"].includes(classified.code))return false;
+  }
+  seen.add(key);
+  return true;
+ });
 }
 function v2192Esc(v){return typeof esc==="function"?esc(v):String(v??"");}
 
@@ -10301,6 +10357,12 @@ function v2192RenderMonitor(){
  const nNew=changes.filter(x=>x.type==="NEW").length;
  const nRemoved=changes.filter(x=>x.type==="REMOVED").length;
  const nError=months.reduce((s,x)=>s+Number(x.needCheck||0),0);
+ const feedReady=v2172CalendarFeedState.status==="ready";
+ const feedStatus=feedReady
+  ? `Airbnb disahkan • ${v2172ExternalCalendarCache.length} blok • ${new Date(v2172CalendarFeedState.lastSuccessAt).toLocaleString("ms-MY",{timeZone:"Asia/Kuala_Lumpur"})}`
+  : v2172CalendarFeedState.status==="error"
+   ? "Sync gagal • data terakhir dikekalkan. "+v2172CalendarFeedState.error
+   : "Menunggu pengesahan feed Airbnb. Tekan SYNC & CHECK AIRBNB.";
  const stateText=v2192MonitorExpanded?"TUTUP DETAIL":"BUKA DETAIL";
 
  p.innerHTML=`
@@ -10315,17 +10377,18 @@ function v2192RenderMonitor(){
    </div>
   </div>
 
+  <div class="v2192-note" role="status">${v2192Esc(feedStatus)}</div>
   <div class="v2192-quick">
    <span>📅 ${months.length} BULAN</span>
    <span>🟢 NEW ${nNew}</span>
    <span>🔴 REMOVED ${nRemoved}</span>
-   <span>${nError>0?`⚠️ ERROR ${nError}`:"✅ TALLY"}</span>
+   <span>${!feedReady?"⏳ BELUM DISAHKAN":nError>0?`⚠️ ERROR ${nError}`:"✅ TALLY"}</span>
   </div>
 
   <div class="v2192-body ${v2192MonitorExpanded?"":"collapsed"}">
    <div class="v2192-scroll">
     <div class="v2192-grid">
-     ${months.map(x=>`<div class="v2192-month ${x.needCheck>0?"v2195-month-error":""}" ${x.needCheck>0?`onclick="v2195OpenMonthIssues('${x.key}')"`:""}><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${x.ical}</div><div class="s">ABNB ${x.ical} • ADMIN/Direct ${x.admin}</div>${x.needCheck>0?`<span class="err">⚠ ERROR • ${x.needCheck} NEED TO CHECK • TEKAN</span>`:`<span class="ok">✓ TALLY</span>`}</div>`).join("")}
+     ${months.map(x=>`<div class="v2192-month ${x.needCheck>0?"v2195-month-error":""}" ${x.needCheck>0?`onclick="v2195OpenMonthIssues('${x.key}')"`:""}><div class="m">${v2192Esc(v2192MonthLabel(x.key))}</div><div class="n">${feedReady?x.ical:"—"}</div><div class="s">ABNB ${feedReady?x.ical:"—"} • ADMIN/Direct ${x.admin}</div>${x.needCheck>0?`<span class="err">⚠ ERROR • ${x.needCheck} NEED TO CHECK • TEKAN</span>`:`<span class="ok">${feedReady?"✓ TALLY":"MENUNGGU SYNC"}</span>`}</div>`).join("")}
     </div>
 
     <div class="v2192-summary">Bulan lepas disembunyikan • Error ikut range Check-in → Check-out. Bila data tally selepas Sync, error hilang sendiri.</div>
@@ -10408,7 +10471,7 @@ window.v214ActivateTab=v214ActivateTab;
 
 // Immediate visual init. The card must appear even before a successful Firebase state load.
 setTimeout(()=>{try{v2192RenderMonitor();v2192LoadState().then(()=>v2192RenderMonitor());}catch(e){console.warn("V2.19.2 init",e)}},1800);
-window.THE5R_AIRBNB_MONITOR_VERSION="V2.21.1E_COMPACT_COLLAPSIBLE_MONITOR";
+window.THE5R_AIRBNB_MONITOR_VERSION="V2.23.4_VERIFIED_FEED_RECONCILIATION";
 
 // ============================================================
 // V2.21.2 — QUICK RETURN SD AFTER CHECKOUT
