@@ -1142,6 +1142,87 @@ h3{font-size:19px;line-height:1.25;font-weight:800}
 @media(max-width:700px){.v222-summary{grid-template-columns:1fr 1fr}.v222-controls label{min-width:calc(50% - 8px)}}
 </style>
 
+<style id="villa-admin-completed-mobile">
+@media (max-width: 700px) {
+  #v214Nav {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+  }
+  #v214Nav .v214-tab {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 44px;
+  }
+  #v214CompletedPanel,
+  #v214CompletedPanel #bookingCloudCard,
+  #v214CompletedPanel #v214BookingCards,
+  #v214CompletedPanel #v214BookingCards > div {
+    min-width: 0;
+    max-width: 100%;
+  }
+  #v214CompletedPanel #bookingCloudCard {
+    padding: 12px !important;
+    overflow-wrap: anywhere;
+  }
+  /* Completed cards share the legacy table wrapper. Keep them in page flow. */
+  #v214CompletedPanel #bookingCloudCard > .table {
+    overflow: visible;
+  }
+  #v214CompletedPanel #v2168FilterBar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #v214CompletedPanel #v2168FilterBar :is(label, input, select) {
+    min-width: 0;
+    max-width: 100%;
+  }
+  #v214CompletedPanel #v2168FilterBar :is(.v2168-filter-search, .v2168-reset, .v2168-filter-summary) {
+    grid-column: 1 / -1;
+  }
+  #v214CompletedPanel #v214BookingCards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #v214CompletedPanel .v214-booking-card {
+    padding: 12px !important;
+  }
+  #v214CompletedPanel .v214-booking-card + .v214-booking-card {
+    margin-top: 10px;
+  }
+  #v214CompletedPanel .v214-booking-top {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  #v214CompletedPanel .v214-booking-top > div {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+  #v214CompletedPanel .v216-gradebar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #v214CompletedPanel .v216-gradebar button,
+  #v214CompletedPanel .v216-gradebar > .v2163-more > summary {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 44px !important;
+    padding-inline: 8px !important;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+  #v214CompletedPanel .v216-gradebar > .v2163-more {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+  #v214CompletedPanel .v216-gradebar > .v2163-more[open] {
+    grid-column: 1 / -1;
+  }
+  #v214CompletedPanel .v216-gradebar > .v2163-more > .v2163-more-menu {
+    position: static !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-top: 6px !important;
+  }
+}
+</style>
 </head>
 <body>
 <div class="wrap">
