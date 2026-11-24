@@ -8598,7 +8598,7 @@ window.THE5R_UPCOMING_CALENDAR_VERSION="V2.19.3_CLICK_TO_GUEST";
    .v2194-tally-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
    .v2194-tally-title{font-size:17px;font-weight:900;color:#173b62}
    .v2194-tally-sub{font-size:11px;color:#64748b;line-height:1.45;margin-top:3px}
-   .v2194-nav{display:flex;gap:6px}.v2194-nav button{border:1px solid #cbd5e1;background:#f8fafc;border-radius:9px;padding:7px 10px;font-weight:850;cursor:pointer}.v2194-nav button:disabled{opacity:.35;cursor:not-allowed}
+   .v2194-month{white-space:nowrap;color:#193956}.v2194-nav{display:flex;align-items:center;gap:6px}.v2194-nav button{border:1px solid #cbd5e1;background:#f8fafc;border-radius:9px;padding:7px 10px;font-weight:850;cursor:pointer}.v2194-nav button:disabled{opacity:.35;cursor:not-allowed}
    .v2194-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
    .v2194-dow{text-align:center;font-size:10px;font-weight:900;color:#64748b;padding:3px 0}
    .v2194-day{min-height:76px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;padding:6px;box-sizing:border-box;cursor:default;overflow:hidden}
@@ -8771,8 +8771,8 @@ function v2194RenderTallyCard(target){
  }
  card.innerHTML=`
   <div class="v2194-tally-head">
-   <div><div class="v2194-tally-title">📅 AIRBNB ↔ ADMIN TALLY — ${v2194Esc(v2194MonthLabel(y,m))}</div><div class="v2194-tally-sub">Tally ikut RANGE Check-in → Check-out. Paparan dihadkan 6 bulan: bulan semasa + 5 bulan seterusnya. Tarikh sama = TALLY. Range berbeza = DATE MISMATCH. Manual close tidak dikira guest.</div></div>
-   <div class="v2194-nav"><button type="button" onclick="v2194Move(-1)" ${v2201AtMin(v2194TallyDate)?"disabled":""}>‹</button><button type="button" onclick="v2194Today()">Today</button><button type="button" onclick="v2194Move(1)" ${v2201AtMax(v2194TallyDate)?"disabled":""}>›</button></div>
+   <div><div class="v2194-tally-title">📅 AIRBNB ↔ ADMIN TALLY</div><div class="v2194-tally-sub">Tally ikut RANGE Check-in → Check-out. Paparan dihadkan 6 bulan: bulan semasa + 5 bulan seterusnya. Tarikh sama = TALLY. Range berbeza = DATE MISMATCH. Manual close tidak dikira guest.</div></div>
+   <div class="v2194-nav"><button type="button" onclick="v2194Move(-1)" ${v2201AtMin(v2194TallyDate)?"disabled":""}>‹</button><button type="button" onclick="v2194Today()">Today</button><strong class="v2194-month">${v2194Esc(v2194MonthLabel(y,m))}</strong><button type="button" onclick="v2194Move(1)" ${v2201AtMax(v2194TallyDate)?"disabled":""}>›</button></div>
   </div>
   <div class="v2194-grid">${cells}</div>
   <div class="v2194-legend"><span>ABNB = iCal Airbnb</span><span>ADMIN = rekod guest sistem</span><span>TALLY ✓ = range sama</span><span>DATE MISMATCH = range tak sama</span><span>MANUAL CLOSE = bukan guest</span></div>`;
